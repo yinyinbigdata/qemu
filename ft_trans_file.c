@@ -484,6 +484,7 @@ int ft_trans_begin(void *opaque)
             error_report("invalid state %d", s->state);
             s->has_error = FT_TRANS_ERR_STATE_INVALID;
             ret = -EINVAL;
+            goto out;
         }
 
         ret = ft_trans_send_header(s, QEMU_VM_TRANSACTION_ACK, 0);

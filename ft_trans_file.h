@@ -47,6 +47,7 @@ extern enum FT_MODE ft_mode;
 #define FT_TRANS_ERR_RECV_PAYLOAD  0x05 /* Recv payload failed */
 #define FT_TRANS_ERR_FLUSH         0x06 /* Flush buffered data failed */
 #define FT_TRANS_ERR_STATE_INVALID 0x07 /* Invalid state */
+#define FT_TRANS_ERR_REALLOC_BUF   0x08 /* Realloc buffer failed */
 
 typedef ssize_t (FtTransPutBufferFunc)(void *opaque, const void *data, size_t size);
 typedef int (FtTransGetBufferFunc)(void *opaque, uint8_t *buf, int64_t pos, size_t size);

@@ -70,6 +70,11 @@ static void ft_trans_append(QEMUFileFtTrans *s,
         trace_ft_trans_realloc(s->buf_max_size, size + 1024);
         s->buf_max_size += size + 1024;
         s->buf = qemu_realloc(s->buf, s->buf_max_size);
+        if (s->buf == NULL) {
+            error_report("ft_trans_file buffer expansion failed\n");
+            s->has_error = FT_TRANS_ERR_REALLOC_BUF;
+            return;
+        }
     }
 
     trace_ft_trans_append(size);

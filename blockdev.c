@@ -592,12 +592,18 @@ void do_commit(Monitor *mon, const QDict *qdict)
     if (!strcmp(device, "all")) {
         bdrv_commit_all();
     } else {
+        int ret;
+
         bs = bdrv_find(device);
         if (!bs) {
             qerror_report(QERR_DEVICE_NOT_FOUND, device);
             return;
         }
-        bdrv_commit(bs);
+        ret = bdrv_commit(bs);
+        if (ret == -EBUSY) {
+            qerror_report(QERR_DEVICE_IN_USE, device);
+            return;
+        }
     }
 }
 
@@ -614,6 +620,10 @@ void qmp_blockdev_snapshot_sync(const char *device, const char *snapshot_file,
     bs = bdrv_find(device);
     if (!bs) {
         error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+        return;
+    }
+    if (bdrv_in_use(bs)) {
+        error_set(errp, QERR_DEVICE_IN_USE, device);
         return;
     }
 
@@ -667,6 +677,10 @@ void qmp_blockdev_snapshot_sync(const char *device, const char *snapshot_file,
 
 static int eject_device(Monitor *mon, BlockDriverState *bs, int force)
 {
+    if (bdrv_in_use(bs)) {
+        qerror_report(QERR_DEVICE_IN_USE, bdrv_get_device_name(bs));
+        return -1;
+    }
     if (!bdrv_dev_has_removable_media(bs)) {
         qerror_report(QERR_DEVICE_NOT_REMOVABLE, bdrv_get_device_name(bs));
         return -1;

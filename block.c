@@ -1224,6 +1224,42 @@ static void coroutine_fn wait_for_overlapping_requests(BlockDriverState *bs,
     } while (retry);
 }
 
+static BdrvTrackedRequest *find_overlapping_request(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors)
+{
+    BdrvTrackedRequest *req;
+
+    QLIST_FOREACH(req, &bs->tracked_requests, list) {
+        if (tracked_request_overlaps(req, sector_num, nb_sectors)) {
+            return req;
+        }
+    }
+    return NULL;
+}
+
+static void warn_overlapping_requests(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors, bool is_write)
+{
+    BdrvTrackedRequest *overlap;
+
+    overlap = find_overlapping_request(bs, sector_num, nb_sectors);
+    if (!overlap) {
+        return;
+    }
+
+    if (!is_write && !overlap->is_write) {
+        return;
+    }
+
+    fprintf(stderr, "warning: overlapping %s sector_num %" PRId64
+            " nb_sectors %d with %s sector_num %" PRId64 " nb_sectors %d"
+            " in \"%s\"\n",
+            overlap->is_write ? "write" : "read",
+            overlap->sector_num, overlap->nb_sectors,
+            is_write ? "write" : "read", sector_num, nb_sectors,
+            bs->filename);
+}
+
 /*
  * Return values:
  * 0        - success
@@ -1573,6 +1609,8 @@ static int coroutine_fn bdrv_co_do_readv(BlockDriverState *bs,
         bdrv_io_limits_intercept(bs, false, nb_sectors);
     }
 
+    warn_overlapping_requests(bs, sector_num, nb_sectors, false);
+
     if (bs->copy_on_read) {
         wait_for_overlapping_requests(bs, sector_num, nb_sectors);
     }
@@ -1632,6 +1670,8 @@ static int coroutine_fn bdrv_co_do_writev(BlockDriverState *bs,
     if (bs->io_limits_enabled) {
         bdrv_io_limits_intercept(bs, true, nb_sectors);
     }
+
+    warn_overlapping_requests(bs, sector_num, nb_sectors, true);
 
     if (bs->copy_on_read) {
         wait_for_overlapping_requests(bs, sector_num, nb_sectors);

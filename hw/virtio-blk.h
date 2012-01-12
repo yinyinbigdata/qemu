@@ -36,6 +36,9 @@
 
 #define VIRTIO_BLK_ID_BYTES     20      /* ID string length */
 
+#define VIRTIO_BLK_FLAG_NOP_MODE_BIT 0  /* complete requests without I/O */
+#define VIRTIO_BLK_FLAG_NOP_MODE     (1 << VIRTIO_BLK_FLAG_NOP_MODE_BIT)
+
 struct virtio_blk_config
 {
     uint64_t capacity;

@@ -671,7 +671,8 @@ static int virtio_blk_init_pci(PCIDevice *pci_dev)
         proxy->class_code = PCI_CLASS_STORAGE_SCSI;
 
     vdev = virtio_blk_init(&pci_dev->qdev, &proxy->block,
-                           &proxy->block_serial);
+                           &proxy->block_serial,
+                           proxy->block_flags);
     if (!vdev) {
         return -1;
     }
@@ -797,6 +798,8 @@ static PCIDeviceInfo virtio_info[] = {
             DEFINE_PROP_STRING("serial", VirtIOPCIProxy, block_serial),
             DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
                             VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
+            DEFINE_PROP_BIT("nop-mode", VirtIOPCIProxy, block_flags,
+                            VIRTIO_BLK_FLAG_NOP_MODE_BIT, false),
             DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
             DEFINE_VIRTIO_BLK_FEATURES(VirtIOPCIProxy, host_features),
             DEFINE_PROP_END_OF_LIST(),

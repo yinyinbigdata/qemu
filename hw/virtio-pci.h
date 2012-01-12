@@ -33,6 +33,7 @@ typedef struct {
     uint32_t nvectors;
     BlockConf block;
     char *block_serial;
+    unsigned int block_flags;
     NICConf nic;
     uint32_t host_features;
 #ifdef CONFIG_LINUX

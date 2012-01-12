@@ -32,6 +32,7 @@ typedef struct VirtIOBlock
     char *serial;
     unsigned short sector_mask;
     DeviceState *qdev;
+    unsigned int flags;
 } VirtIOBlock;
 
 static VirtIOBlock *to_virtio_blk(VirtIODevice *vdev)
@@ -374,6 +375,13 @@ static void virtio_blk_handle_request(VirtIOBlockReq *req,
 
     type = ldl_p(&req->out->type);
 
+    if (!(type & VIRTIO_BLK_T_GET_ID) &&
+        (req->dev->flags & VIRTIO_BLK_FLAG_NOP_MODE)) {
+        virtio_blk_req_complete(req, VIRTIO_BLK_S_OK);
+        g_free(req);
+        return;
+    }
+
     if (type & VIRTIO_BLK_T_FLUSH) {
         virtio_blk_handle_flush(req, mrb);
     } else if (type & VIRTIO_BLK_T_SCSI_CMD) {
@@ -561,7 +569,7 @@ static const BlockDevOps virtio_block_ops = {
 };
 
 VirtIODevice *virtio_blk_init(DeviceState *dev, BlockConf *conf,
-                              char **serial)
+                              char **serial, unsigned int flags)
 {
     VirtIOBlock *s;
     int cylinders, heads, secs;
@@ -597,6 +605,7 @@ VirtIODevice *virtio_blk_init(DeviceState *dev, BlockConf *conf,
     s->serial = *serial;
     s->rq = NULL;
     s->sector_mask = (s->conf->logical_block_size / BDRV_SECTOR_SIZE) - 1;
+    s->flags = flags;
     bdrv_guess_geometry(s->bs, &cylinders, &heads, &secs);
 
     s->vq = virtio_add_queue(&s->vdev, 128, virtio_blk_handle_output);

@@ -18,10 +18,6 @@
 #include "virtio.h"
 #include "qemu-barrier.h"
 
-/* The alignment to use between consumer and producer parts of vring.
- * x86 pagesize again. */
-#define VIRTIO_PCI_VRING_ALIGN         4096
-
 typedef struct VRingDesc
 {
     uint64_t addr;

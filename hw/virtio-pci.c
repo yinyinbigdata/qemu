@@ -29,46 +29,10 @@
 #include "loader.h"
 #include "kvm.h"
 #include "blockdev.h"
+#include "virtio-pci-defs.h"
 #include "virtio-pci.h"
 #include "range.h"
 
-/* from Linux's linux/virtio_pci.h */
-
-/* A 32-bit r/o bitmask of the features supported by the host */
-#define VIRTIO_PCI_HOST_FEATURES        0
-
-/* A 32-bit r/w bitmask of features activated by the guest */
-#define VIRTIO_PCI_GUEST_FEATURES       4
-
-/* A 32-bit r/w PFN for the currently selected queue */
-#define VIRTIO_PCI_QUEUE_PFN            8
-
-/* A 16-bit r/o queue size for the currently selected queue */
-#define VIRTIO_PCI_QUEUE_NUM            12
-
-/* A 16-bit r/w queue selector */
-#define VIRTIO_PCI_QUEUE_SEL            14
-
-/* A 16-bit r/w queue notifier */
-#define VIRTIO_PCI_QUEUE_NOTIFY         16
-
-/* An 8-bit device status register.  */
-#define VIRTIO_PCI_STATUS               18
-
-/* An 8-bit r/o interrupt status register.  Reading the value will return the
- * current contents of the ISR and will also clear it.  This is effectively
- * a read-and-acknowledge. */
-#define VIRTIO_PCI_ISR                  19
-
-/* MSI-X registers: only enabled if MSI-X is enabled. */
-/* A 16-bit vector for configuration changes. */
-#define VIRTIO_MSI_CONFIG_VECTOR        20
-/* A 16-bit vector for selected queue notifications. */
-#define VIRTIO_MSI_QUEUE_VECTOR         22
-
-/* Config space size */
-#define VIRTIO_PCI_CONFIG_NOMSI         20
-#define VIRTIO_PCI_CONFIG_MSI           24
 #define VIRTIO_PCI_REGION_SIZE(dev)     (msix_present(dev) ? \
                                          VIRTIO_PCI_CONFIG_MSI : \
                                          VIRTIO_PCI_CONFIG_NOMSI)
@@ -78,13 +42,6 @@
 #define VIRTIO_PCI_CONFIG(dev)          (msix_enabled(dev) ? \
                                          VIRTIO_PCI_CONFIG_MSI : \
                                          VIRTIO_PCI_CONFIG_NOMSI)
-
-/* How many bits to shift physical queue address written to QUEUE_PFN.
- * 12 is historical, and due to x86 page size. */
-#define VIRTIO_PCI_QUEUE_ADDR_SHIFT    12
-
-/* Flags track per-device state like workarounds for quirks in older guests. */
-#define VIRTIO_PCI_FLAG_BUS_MASTER_BUG  (1 << 0)
 
 /* QEMU doesn't strictly need write barriers since everything runs in
  * lock-step.  We'll leave the calls to wmb() in though to make it obvious for

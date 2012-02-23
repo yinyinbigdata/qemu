@@ -165,6 +165,11 @@ void qed_commit_l2_cache_entry(L2TableCache *l2_cache, CachedL2Table *l2_table)
         entry = QTAILQ_FIRST(&l2_cache->entries);
         QTAILQ_REMOVE(&l2_cache->entries, entry, node);
         l2_cache->n_entries--;
+        if (entry->ref > 1) {
+            fprintf(stderr, "%s: evicting CachedL2Table %p with refcount %d "
+                    "offset %" PRId64 " table %p\n",
+                    __func__, entry, entry->ref, entry->offset, entry->table);
+        }
         qed_unref_l2_cache_entry(entry);
     }
 

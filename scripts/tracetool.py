@@ -12,6 +12,13 @@ import sys
 import getopt
 import re
 
+def error_write(*lines):
+    sys.stderr.writelines(lines)
+
+def error(*lines):
+    error_write(*lines)
+    sys.exit(1)
+
 ######################################################################
 # formats
 
@@ -414,8 +421,9 @@ def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "", long_options)
     except getopt.GetoptError, err:
-        # print help information and exit:
-        print str(err) # will print something like "option -a not recognized"
+        # print help information and exit
+        # will print something like "option -a not recognized"
+        error_write(str(err)+"\n")
         usage()
         sys.exit(2)
     for opt, arg in opts:
@@ -444,32 +452,25 @@ def main():
             usage()
 
     if fmt not in formats:
-        print "Unknown format: %s" % fmt
-        print
+        error_write("Unknown format: %s\n\n" % fmt)
         usage()
     if backend not in backends:
-        print "Unknown backend: %s" % backend
-        print
+        error_write("Unknown backend: %s\n\n" % backend)
         usage()
         sys.exit(0)
 
     if backend != 'dtrace' and fmt == 'd':
-        print 'DTrace probe generator not applicable to %s backend' % backend
-        sys.exit(1)
+        error('DTrace probe generator not applicable to %s backend\n' % backend)
 
     if fmt == 'stap':
         if backend != "dtrace":
-            print 'SystemTAP tapset generator not applicable to %s backend' % backend
-            sys.exit(1)
+            error('SystemTAP tapset generator not applicable to %s backend\n' % backend)
         if binary == "":
-            print '--binary is required for SystemTAP tapset generator'
-            sys.exit(1)
+            error("--binary is required for SystemTAP tapset generator\n")
         if not probeprefix and  not targettype:
-            print '--target-type is required for SystemTAP tapset generator'
-            sys.exit(1)
+            error("--target-type is required for SystemTAP tapset generator\n")
         if not probeprefix and  not targetarch:
-            print '--target-arch is required for SystemTAP tapset generator'
-            sys.exit(1)
+            error("--target-arch is required for SystemTAP tapset generator\n")
         if probeprefix == "":
             probeprefix = 'qemu.' + targettype + '.' + targetarch
 

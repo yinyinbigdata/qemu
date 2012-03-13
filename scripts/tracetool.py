@@ -89,23 +89,6 @@ def get_fmt(line, sep=')'):
     event, sep, fmt = line.partition(sep)
     return fmt.rstrip('\n')
 
-def calc_sizeofargs(line):
-    args = get_args(line)
-    argc = get_argc(line)
-    str = []
-    newstr = ""
-    if argc > 0:
-      str = args.split(',')
-      for elem in str:
-        if is_string(elem): #string
-          type, sep, var = elem.rpartition('*')
-          newstr = newstr+"4 + strlen("+var.lstrip()+") + "
-        else:
-          newstr = newstr + '8 + '
-    newstr = newstr + '0' # takes care of last +
-    return newstr
-
-
 def trace_h_begin():
     print '''#ifndef TRACE_H
 #define TRACE_H
@@ -428,7 +411,6 @@ class Event(object):
         self.name = get_name(line)
         self.argc = get_argc(line)
         self.argnames = get_argnames(line)
-        self.sizestr = calc_sizeofargs(line)
         self.fmt = get_fmt(line)
         self.properties = get_properties(line)
 

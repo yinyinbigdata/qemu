@@ -10,6 +10,7 @@
 
 import sys
 import getopt
+import re
 
 def usage():
     print "Tracetool: Generate tracing code for trace events file on stdin"
@@ -38,25 +39,14 @@ Options:
 '''
     sys.exit(1)
 
-def get_name(line, sep='('):
-    head, sep, tail = line.partition(sep)
-    property, sep, name = head.rpartition(' ')
-    return name
-
 def get_properties(line, sep='('):
     head, sep, tail = line.partition(sep)
     property, sep, name = head.rpartition(' ')
     return property.split()
 
-def get_args(line, sep1='(', sep2=')'):
-    head, sep1, tail = line.partition(sep1)
-    args, sep2, fmt_str = tail.partition(sep2)
-    return args
-
-def get_argnames(line, sep=','):
+def get_argnames(args):
     nfields = 0
     str = []
-    args = get_args(line)
     for field in args.split():
       nfields = nfields + 1
       # Drop pointer star
@@ -77,17 +67,6 @@ def get_argnames(line, sep=','):
     else:
       return ''
 
-def get_argc(line):
-    argc = 0
-    argnames = get_argnames(line)
-    if argnames:
-      for name in argnames.split(','):
-        argc = argc + 1
-    return argc
-
-def get_fmt(line, sep=')'):
-    event, sep, fmt = line.partition(sep)
-    return fmt.rstrip('\n')
 
 def trace_h_begin():
     print '''#ifndef TRACE_H
@@ -402,15 +381,23 @@ trace_gen = {
 }
 
 # A trace event
+cre = re.compile("(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
+
 class Event(object):
     def __init__(self, num, line):
         self.num = num
-        self.args = get_args(line)
+        m = cre.match(line)
+        assert m is not None
+        groups = m.groupdict('')
+        self.args = groups["args"]
         self.arglist = self.args.split(',')
-        self.name = get_name(line)
-        self.argc = get_argc(line)
-        self.argnames = get_argnames(line)
-        self.fmt = get_fmt(line)
+        self.name = groups["name"]
+        if len(self.arglist) == 1 and self.arglist[0] == "void":
+            self.argc = 0
+        else:
+            self.argc = len(self.arglist)
+        self.argnames = get_argnames(self.args)
+        self.fmt = groups["fmt"]
         self.properties = get_properties(line)
 
 # Generator that yields Event objects given a trace-events file object

@@ -240,8 +240,7 @@ def ust_c(events):
 #undef inline
 #undef wmb
 #include "trace.h"'''
-    eventlist = list(events)
-    for event in eventlist:
+    for event in events:
         argnames = event.argnames
         if event.argc > 0:
             argnames = ', ' + event.argnames
@@ -273,7 +272,7 @@ static void ust_%(name)s_probe(%(args)s)
     print '''
 static void __attribute__((constructor)) trace_init(void)
 {'''
-    for event in eventlist:
+    for event in events:
         print '    register_trace_ust_%(name)s(ust_%(name)s_probe);' % {
     'name': event.name
 }
@@ -417,13 +416,15 @@ class Event(object):
 # Generator that yields Event objects given a trace-events file object
 def read_events(fobj):
     event_num = 0
+    res = []
     for line in fobj:
         if not line.strip():
             continue
         if line.lstrip().startswith('#'):
 	    continue
-        yield Event(event_num, line)
+        res.append(Event(event_num, line))
         event_num += 1
+    return res
 
 binary = ""
 probeprefix = ""

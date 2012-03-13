@@ -39,11 +39,6 @@ Options:
 '''
     sys.exit(1)
 
-def get_properties(line, sep='('):
-    head, sep, tail = line.partition(sep)
-    property, sep, name = head.rpartition(' ')
-    return property.split()
-
 def get_argnames(args):
     nfields = 0
     str = []
@@ -381,7 +376,9 @@ trace_gen = {
 }
 
 # A trace event
-cre = re.compile("(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
+cre = re.compile("((?P<props>.*)\s+)?(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
+
+VALID_PROPS = set(["disable"])
 
 class Event(object):
     def __init__(self, line):
@@ -397,7 +394,10 @@ class Event(object):
             self.argc = len(self.arglist)
         self.argnames = get_argnames(self.args)
         self.fmt = groups["fmt"]
-        self.properties = get_properties(line)
+        self.properties = groups["props"].split()
+        unknown_props = set(self.properties) - VALID_PROPS
+        if len(unknown_props) > 0:
+            raise ValueError("Unknown properties: %s" % ", ".join(unknown_props))
 
 # Generator that yields Event objects given a trace-events file object
 def read_events(fobj):

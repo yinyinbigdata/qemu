@@ -59,11 +59,11 @@ TARGET_TYPE=system
 endif
 
 $(QEMU_PROG).stp: $(SRC_PATH)/trace-events
-	$(call quiet-command,sh $(SRC_PATH)/scripts/tracetool \
-		--$(TRACE_BACKEND) \
-		--binary $(bindir)/$(QEMU_PROG) \
-		--target-arch $(TARGET_ARCH) \
-		--target-type $(TARGET_TYPE) \
+	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/tracetool.py \
+		--backend=$(TRACE_BACKEND) \
+		--binary=$(bindir)/$(QEMU_PROG) \
+		--target-arch=$(TARGET_ARCH) \
+		--target-type=$(TARGET_TYPE) \
 		--stap < $(SRC_PATH)/trace-events > $(QEMU_PROG).stp,"  GEN   $(QEMU_PROG).stp")
 else
 stap:

@@ -106,14 +106,14 @@ def simple_h(events):
     print '#include "trace/simple.h"'
     print
 
-    for event in events:
+    for num, event in enumerate(events):
         if event.argc:
             argstr = event.argnames.split()
             arg_prefix = '(uint64_t)(uintptr_t)'
             cast_args = arg_prefix + arg_prefix.join(argstr)
-            simple_args = (str(event.num) + ', ' + cast_args)
+            simple_args = (str(num) + ', ' + cast_args)
         else:
-            simple_args = str(event.num)
+            simple_args = str(num)
 
         print '''static inline void trace_%(name)s(%(args)s)
 {
@@ -125,7 +125,7 @@ def simple_h(events):
     'trace_args': simple_args
 }
         print
-    print '#define NR_TRACE_EVENTS %d' % (event.num + 1)
+    print '#define NR_TRACE_EVENTS %d' % len(events)
     print 'extern TraceEvent trace_list[NR_TRACE_EVENTS];'
 
 
@@ -154,7 +154,7 @@ def stderr_h(events):
 #include "trace/stderr.h"
 
 extern TraceEvent trace_list[];'''
-    for event in events:
+    for num, event in enumerate(events):
         argnames = event.argnames
         if event.argc > 0:
             argnames = ', ' + event.argnames
@@ -169,12 +169,12 @@ static inline void trace_%(name)s(%(args)s)
 }''' % {
     'name': event.name,
     'args': event.args,
-    'event_num': event.num,
+    'event_num': num,
     'fmt': event.fmt,
     'argnames': argnames
 }
     print
-    print '#define NR_TRACE_EVENTS %d' % (event.num + 1)
+    print '#define NR_TRACE_EVENTS %d' % len(events)
 
 def stderr_c(events):
     print '''#include "trace.h"
@@ -384,8 +384,7 @@ trace_gen = {
 cre = re.compile("(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
 
 class Event(object):
-    def __init__(self, num, line):
-        self.num = num
+    def __init__(self, line):
         m = cre.match(line)
         assert m is not None
         groups = m.groupdict('')
@@ -402,15 +401,13 @@ class Event(object):
 
 # Generator that yields Event objects given a trace-events file object
 def read_events(fobj):
-    event_num = 0
     res = []
     for line in fobj:
         if not line.strip():
             continue
         if line.lstrip().startswith('#'):
 	    continue
-        res.append(Event(event_num, line))
-        event_num += 1
+        res.append(Event(line))
     return res
 
 binary = ""

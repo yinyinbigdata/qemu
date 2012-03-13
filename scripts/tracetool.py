@@ -34,6 +34,13 @@ def h_begin(events):
 #include "qemu-common.h"'''
 
 def h_end(events):
+    for e in events:
+        if 'disable' in e.properties:
+            enabled = 0
+        else:
+            enabled = 1
+        print "#define TRACE_%s_ENABLED %d" % (e.name.upper(), enabled)
+    print
     print '#endif /* TRACE_H */'
 
 def c_begin(events):

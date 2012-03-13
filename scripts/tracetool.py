@@ -39,30 +39,6 @@ Options:
 '''
     sys.exit(1)
 
-def get_argnames(args):
-    nfields = 0
-    str = []
-    for field in args.split():
-      nfields = nfields + 1
-      # Drop pointer star
-      type, ptr, tail = field.partition('*')
-      if type != field:
-        field = tail
-
-      name, sep, tail = field.partition(',')
-
-      if name == field:
-        continue
-      str.append(name)
-      str.append(", ")
-
-    if nfields > 1:
-      str.append(name)
-      return ''.join(str)
-    else:
-      return ''
-
-
 def trace_h_begin():
     print '''#ifndef TRACE_H
 #define TRACE_H
@@ -102,11 +78,11 @@ def simple_h(events):
     print
 
     for num, event in enumerate(events):
-        if event.argc:
-            argstr = event.argnames.split()
-            arg_prefix = '(uint64_t)(uintptr_t)'
+        if len(event.args):
+            argstr = event.args.names()
+            arg_prefix = ', (uint64_t)(uintptr_t)'
             cast_args = arg_prefix + arg_prefix.join(argstr)
-            simple_args = (str(num) + ', ' + cast_args)
+            simple_args = (str(num) + cast_args)
         else:
             simple_args = str(num)
 
@@ -116,20 +92,13 @@ def simple_h(events):
 }''' % {
     'name': event.name,
     'args': event.args,
-    'argc': event.argc,
+    'argc': len(event.args),
     'trace_args': simple_args
 }
         print
     print '#define NR_TRACE_EVENTS %d' % len(events)
     print 'extern TraceEvent trace_list[NR_TRACE_EVENTS];'
 
-
-def is_string(arg):
-    strtype = ('const char*', 'char*', 'const char *', 'char *')
-    if arg.lstrip().startswith(strtype):
-        return True
-    else:
-        return False
 
 def simple_c(events):
     print '#include "trace.h"'
@@ -150,11 +119,9 @@ def stderr_h(events):
 
 extern TraceEvent trace_list[];'''
     for num, event in enumerate(events):
-        argnames = event.argnames
-        if event.argc > 0:
-            argnames = ', ' + event.argnames
-        else:
-            argnames = ''
+        argnames = ", ".join(event.args.names())
+        if len(event.args) > 0:
+            argnames = ", " + argnames
         print '''
 static inline void trace_%(name)s(%(args)s)
 {
@@ -191,13 +158,13 @@ def ust_h(events):
 #undef wmb'''
 
     for event in events:
-        if event.argc > 0:
+        if len(event.args) > 0:
             print '''
 DECLARE_TRACE(ust_%(name)s, TP_PROTO(%(args)s), TP_ARGS(%(argnames)s));
 #define trace_%(name)s trace_ust_%(name)s''' % {
     'name': event.name,
     'args': event.args,
-    'argnames': event.argnames
+    'argnames': ", ".join(event.args.names())
 }
         else:
             print '''
@@ -215,9 +182,9 @@ def ust_c(events):
 #undef wmb
 #include "trace.h"'''
     for event in events:
-        argnames = event.argnames
-        if event.argc > 0:
-            argnames = ', ' + event.argnames
+        argnames = ", ".join(event.args.names())
+        if len(event.args) > 0:
+            argnames = ', ' + argnames
             print '''
 DEFINE_TRACE(ust_%(name)s);
 
@@ -265,7 +232,7 @@ def dtrace_h(events):
     'name': event.name,
     'args': event.args,
     'uppername': event.name.upper(),
-    'argnames': event.argnames,
+    'argnames': ", ".join(event.args.names()),
 }
 
 def dtrace_c(events):
@@ -304,12 +271,12 @@ probe %(probeprefix)s.%(name)s = process("%(binary)s").mark("%(name)s")
     'binary': binary
 }
         i = 1
-        if event.argc > 0:
-            for arg in event.argnames.split(','):
+        if len(event.args) > 0:
+            for name in event.args.names():
                 # 'limit' is a reserved keyword
-                if arg == 'limit':
-                    arg = '_limit'
-                print '  %s = $arg%d;' % (arg.lstrip(), i)
+                if name == 'limit':
+                    name = '_limit'
+                print '  %s = $arg%d;' % (name.lstrip(), i)
                 i += 1
         print '}'
     print
@@ -383,6 +350,39 @@ trace_gen = {
     },
 }
 
+# Event arguments
+class Arguments:
+    def __init__ (self, arg_str):
+        self._args = []
+        for arg in arg_str.split(","):
+            arg = arg.strip()
+            parts = arg.split()
+            head, sep, tail = parts[-1].rpartition("*")
+            parts = parts[:-1]
+            if tail == "void":
+                assert len(parts) == 0 and sep == ""
+                continue
+            arg_type = " ".join(parts + [ " ".join([head, sep]).strip() ]).strip()
+            self._args.append((arg_type, tail))
+
+    def __iter__(self):
+        return iter(self._args)
+
+    def __len__(self):
+        return len(self._args)
+
+    def __str__(self):
+        if len(self._args) == 0:
+            return "void"
+        else:
+            return ", ".join([ " ".join([t, n]) for t,n in self._args ])
+
+    def names(self):
+        return [ name for _, name in self._args ]
+
+    def types(self):
+        return [ type_ for type_, _ in self._args ]
+
 # A trace event
 cre = re.compile("((?P<props>.*)\s+)?(?P<name>[^(\s]+)\((?P<args>[^)]*)\)\s*(?P<fmt>\".*)?")
 
@@ -393,16 +393,11 @@ class Event(object):
         m = cre.match(line)
         assert m is not None
         groups = m.groupdict('')
-        self.args = groups["args"]
-        self.arglist = self.args.split(',')
         self.name = groups["name"]
-        if len(self.arglist) == 1 and self.arglist[0] == "void":
-            self.argc = 0
-        else:
-            self.argc = len(self.arglist)
-        self.argnames = get_argnames(self.args)
         self.fmt = groups["fmt"]
         self.properties = groups["props"].split()
+        self.args = Arguments(groups["args"])
+
         unknown_props = set(self.properties) - VALID_PROPS
         if len(unknown_props) > 0:
             raise ValueError("Unknown properties: %s" % ", ".join(unknown_props))

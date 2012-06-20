@@ -111,6 +111,9 @@ enum {
 
     QCOW2_INCOMPATIBLE_FEAT_DIRTY   = 0x1,
     QCOW2_INCOMPATIBLE_FEAT_MASK    = QCOW2_INCOMPATIBLE_FEAT_DIRTY,
+
+    QCOW2_COMPATIBLE_FEAT_LAZY_REFCOUNTS = 0x1,
+    QCOW2_COMPATIBLE_FEAT_MASK      = QCOW2_COMPATIBLE_FEAT_LAZY_REFCOUNTS,
 };
 
 typedef struct Qcow2Feature {
@@ -240,6 +243,11 @@ static inline int qcow2_get_cluster_type(uint64_t l2_entry)
     }
 }
 
+/* Check whether refcounts are eager or lazy */
+static inline bool qcow2_need_accurate_refcounts(BDRVQcowState *s)
+{
+    return !(s->incompatible_features & QCOW2_INCOMPATIBLE_FEAT_DIRTY);
+}
 
 // FIXME Need qcow2_ prefix to global functions
 

@@ -215,6 +215,40 @@ static void report_unsupported_feature(BlockDriverState *bs,
 }
 
 /*
+ * Sets the dirty bit and flushes afterwards if necessary.
+ *
+ * The incompatible_features bit is only set if the image file header was
+ * updated successfully.  Therefore it is not required to check the return
+ * value of this function.
+ */
+static int qcow2_mark_dirty(BlockDriverState *bs)
+{
+    BDRVQcowState *s = bs->opaque;
+    uint64_t val;
+    int ret;
+
+    if (s->incompatible_features & QCOW2_INCOMPATIBLE_FEAT_DIRTY) {
+        return 0; /* already dirty */
+    }
+
+    val = cpu_to_be64(s->incompatible_features |
+                      QCOW2_INCOMPATIBLE_FEAT_DIRTY);
+    ret = bdrv_pwrite(bs->file, offsetof(QCowHeader, incompatible_features),
+                      &val, sizeof(val));
+    if (ret < 0) {
+        return ret;
+    }
+    ret = bdrv_flush(bs->file);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* Only treat image as dirty if the header was updated successfully */
+    s->incompatible_features |= QCOW2_INCOMPATIBLE_FEAT_DIRTY;
+    return 0;
+}
+
+/*
  * Clears the dirty bit and flushes before if necessary.  Only call this
  * function when there are no pending requests, it does not guard against
  * concurrent requests dirtying the image.
@@ -752,6 +786,11 @@ static coroutine_fn int qcow2_co_writev(BlockDriverState *bs,
             goto fail;
         }
 
+        if (l2meta.nb_clusters > 0 &&
+            (s->compatible_features & QCOW2_COMPATIBLE_FEAT_LAZY_REFCOUNTS)) {
+            qcow2_mark_dirty(bs);
+        }
+
         cluster_offset = l2meta.cluster_offset;
         assert((cluster_offset & 511) == 0);
 
@@ -1172,6 +1211,11 @@ static int qcow2_create2(const char *filename, int64_t total_size,
         header.crypt_method = cpu_to_be32(QCOW_CRYPT_NONE);
     }
 
+    if (flags & BLOCK_FLAG_LAZY_REFCOUNTS) {
+        header.compatible_features |=
+            cpu_to_be64(QCOW2_COMPATIBLE_FEAT_LAZY_REFCOUNTS);
+    }
+
     ret = bdrv_pwrite(bs, 0, &header, sizeof(header));
     if (ret < 0) {
         goto out;
@@ -1285,6 +1329,8 @@ static int qcow2_create(const char *filename, QEMUOptionParameter *options)
                     options->value.s);
                 return -EINVAL;
             }
+        } else if (!strcmp(options->name, BLOCK_OPT_LAZY_REFCOUNTS)) {
+            flags |= options->value.n ? BLOCK_FLAG_LAZY_REFCOUNTS : 0;
         }
         options++;
     }
@@ -1292,6 +1338,12 @@ static int qcow2_create(const char *filename, QEMUOptionParameter *options)
     if (backing_file && prealloc) {
         fprintf(stderr, "Backing file and preallocation cannot be used at "
             "the same time\n");
+        return -EINVAL;
+    }
+
+    if (version < 3 && (flags & BLOCK_FLAG_LAZY_REFCOUNTS)) {
+        fprintf(stderr, "Lazy refcounts only supported with compatibility "
+                "level 1.1 and above (use compat=1.1 or greater)\n");
         return -EINVAL;
     }
 
@@ -1481,10 +1533,12 @@ static coroutine_fn int qcow2_co_flush_to_os(BlockDriverState *bs)
         return ret;
     }
 
-    ret = qcow2_cache_flush(bs, s->refcount_block_cache);
-    if (ret < 0) {
-        qemu_co_mutex_unlock(&s->lock);
-        return ret;
+    if (qcow2_need_accurate_refcounts(s)) {
+        ret = qcow2_cache_flush(bs, s->refcount_block_cache);
+        if (ret < 0) {
+            qemu_co_mutex_unlock(&s->lock);
+            return ret;
+        }
     }
     qemu_co_mutex_unlock(&s->lock);
 
@@ -1598,6 +1652,11 @@ static QEMUOptionParameter qcow2_create_options[] = {
         .name = BLOCK_OPT_PREALLOC,
         .type = OPT_STRING,
         .help = "Preallocation mode (allowed values: off, metadata)"
+    },
+    {
+        .name = BLOCK_OPT_LAZY_REFCOUNTS,
+        .type = OPT_FLAG,
+        .help = "Postpone refcount updates",
     },
     { NULL }
 };

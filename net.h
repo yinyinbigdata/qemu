@@ -111,6 +111,8 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
                             int iovcnt,
                             void *opaque);
 
+void qemu_net_poll(NetClientState *nc, bool enable);
+
 void print_net_client(Monitor *mon, NetClientState *nc);
 void do_info_network(Monitor *mon);
 

@@ -466,6 +466,13 @@ qemu_sendv_packet(NetClientState *nc, const struct iovec *iov, int iovcnt)
     return qemu_sendv_packet_async(nc, iov, iovcnt, NULL);
 }
 
+void qemu_net_poll(NetClientState *nc, bool enable)
+{
+    if (nc->info->poll) {
+        nc->info->poll(nc, enable);
+    }
+}
+
 NetClientState *qemu_find_netdev(const char *id)
 {
     NetClientState *nc;

@@ -153,6 +153,13 @@ void qemu_macaddr_default_if_unset(MACAddr *macaddr)
     macaddr->a[5] = 0x56 + index++;
 }
 
+static void notify_link_status_changed(NetClientState *nc)
+{
+    if (nc->info->link_status_changed) {
+        nc->info->link_status_changed(nc);
+    }
+}
+
 /**
  * Generate a name for net client
  *
@@ -266,9 +273,7 @@ void qemu_del_net_client(NetClientState *nc)
         nic->peer_deleted = true;
         /* Let NIC know peer is gone. */
         nc->peer->link_down = true;
-        if (nc->peer->info->link_status_changed) {
-            nc->peer->info->link_status_changed(nc->peer);
-        }
+        notify_link_status_changed(nc->peer);
         qemu_cleanup_net_client(nc);
         return;
     }
@@ -901,9 +906,7 @@ done:
 
     nc->link_down = !up;
 
-    if (nc->info->link_status_changed) {
-        nc->info->link_status_changed(nc);
-    }
+    notify_link_status_changed(nc);
 
     /* Notify peer. Don't update peer link status: this makes it possible to
      * disconnect from host network without notifying the guest.
@@ -912,8 +915,8 @@ done:
      * Current behaviour is compatible with qemu vlans where there could be
      * multiple clients that can still communicate with each other in
      * disconnected mode. For now maintain this compatibility. */
-    if (nc->peer && nc->peer->info->link_status_changed) {
-        nc->peer->info->link_status_changed(nc->peer);
+    if (nc->peer) {
+        notify_link_status_changed(nc->peer);
     }
 }
 

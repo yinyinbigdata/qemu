@@ -172,6 +172,10 @@ typedef struct dp8393xState {
     void* mem_opaque;
 } dp8393xState;
 
+static int nic_can_receive(NetClientState *nc);
+static ssize_t nic_receive(NetClientState *nc, const uint8_t * buf,
+                           size_t size);
+
 static void dp8393x_update_irq(dp8393xState *s)
 {
     int level = (s->regs[SONIC_IMR] & s->regs[SONIC_ISR]) ? 1 : 0;
@@ -408,9 +412,9 @@ static void do_transmit_packets(dp8393xState *s)
         if (s->regs[SONIC_RCR] & (SONIC_RCR_LB1 | SONIC_RCR_LB0)) {
             /* Loopback */
             s->regs[SONIC_TCR] |= SONIC_TCR_CRSL;
-            if (s->nic->nc.info->can_receive(&s->nic->nc)) {
+            if (nic_can_receive(&s->nic->nc)) {
                 s->loopback_packet = 1;
-                s->nic->nc.info->receive(&s->nic->nc, s->tx_buffer, tx_len);
+                nic_receive(&s->nic->nc, s->tx_buffer, tx_len);
             }
         } else {
             /* Transmit packet */
@@ -871,12 +875,23 @@ static void nic_cleanup(NetClientState *nc)
     g_free(s);
 }
 
-static NetClientInfo net_dp83932_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = nic_can_receive,
-    .receive = nic_receive,
-    .cleanup = nic_cleanup,
+#define TYPE_DP83932_NET_CLIENT "dp83932-net-client"
+
+static void dp83932_net_client_class_init(ObjectClass *klass,
+                                          void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = nic_can_receive;
+    ncc->receive = nic_receive;
+    ncc->cleanup = nic_cleanup;
+}
+
+static TypeInfo dp83932_net_client_info = {
+    .name = TYPE_DP83932_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = dp83932_net_client_class_init,
 };
 
 void dp83932_init(NICInfo *nd, hwaddr base, int it_shift,
@@ -901,7 +916,8 @@ void dp83932_init(NICInfo *nd, hwaddr base, int it_shift,
     s->conf.macaddr = nd->macaddr;
     s->conf.peer = nd->netdev;
 
-    s->nic = qemu_new_nic(&net_dp83932_info, &s->conf, nd->model, nd->name, s);
+    s->nic = qemu_new_nic(TYPE_DP83932_NET_CLIENT, &s->conf, nd->model,
+                          nd->name, s);
 
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     qemu_register_reset(nic_reset, s);
@@ -911,3 +927,10 @@ void dp83932_init(NICInfo *nd, hwaddr base, int it_shift,
                           "dp8393x", 0x40 << it_shift);
     memory_region_add_subregion(address_space, base, &s->mmio);
 }
+
+static void dp83932_register_types(void)
+{
+    type_register_static(&dp83932_net_client_info);
+}
+
+type_init(dp83932_register_types)

@@ -449,12 +449,22 @@ static void mcf_fec_cleanup(NetClientState *nc)
     g_free(s);
 }
 
-static NetClientInfo net_mcf_fec_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = mcf_fec_can_receive,
-    .receive = mcf_fec_receive,
-    .cleanup = mcf_fec_cleanup,
+#define TYPE_MCF_FEC_NET_CLIENT "mcf-fec-net-client"
+
+static void mcf_fec_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = mcf_fec_can_receive;
+    ncc->receive = mcf_fec_receive;
+    ncc->cleanup = mcf_fec_cleanup;
+}
+
+static TypeInfo mcf_fec_net_client_info = {
+    .name = TYPE_MCF_FEC_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = mcf_fec_net_client_class_init,
 };
 
 void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd,
@@ -474,7 +484,15 @@ void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd,
     s->conf.macaddr = nd->macaddr;
     s->conf.peer = nd->netdev;
 
-    s->nic = qemu_new_nic(&net_mcf_fec_info, &s->conf, nd->model, nd->name, s);
+    s->nic = qemu_new_nic(TYPE_MCF_FEC_NET_CLIENT, &s->conf, nd->model,
+                          nd->name, s);
 
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 }
+
+static void mcf_fec_register_types(void)
+{
+    type_register_static(&mcf_fec_net_client_info);
+}
+
+type_init(mcf_fec_register_types)

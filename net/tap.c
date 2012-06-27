@@ -119,7 +119,7 @@ static ssize_t tap_write_packet(TAPState *s, const struct iovec *iov, int iovcnt
 static ssize_t tap_receive_iov(NetClientState *nc, const struct iovec *iov,
                                int iovcnt)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     const struct iovec *iovp = iov;
     struct iovec iov_copy[iovcnt + 1];
     struct virtio_net_hdr_mrg_rxbuf hdr = { };
@@ -137,7 +137,7 @@ static ssize_t tap_receive_iov(NetClientState *nc, const struct iovec *iov,
 
 static ssize_t tap_receive_raw(NetClientState *nc, const uint8_t *buf, size_t size)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     struct iovec iov[2];
     int iovcnt = 0;
     struct virtio_net_hdr_mrg_rxbuf hdr = { };
@@ -157,7 +157,7 @@ static ssize_t tap_receive_raw(NetClientState *nc, const uint8_t *buf, size_t si
 
 static ssize_t tap_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     struct iovec iov[1];
 
     if (s->host_vnet_hdr_len && !s->using_vnet_hdr) {
@@ -186,7 +186,7 @@ ssize_t tap_read_packet(int tapfd, uint8_t *buf, int maxlen)
 
 static void tap_send_completed(NetClientState *nc, ssize_t len)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     tap_read_poll(s, 1);
 }
 
@@ -217,36 +217,26 @@ static void tap_send(void *opaque)
 
 int tap_has_ufo(NetClientState *nc)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
-
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
-
+    TAPState *s = TAP_NET_CLIENT(nc);
     return s->has_ufo;
 }
 
 int tap_has_vnet_hdr(NetClientState *nc)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
-
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
-
+    TAPState *s = TAP_NET_CLIENT(nc);
     return !!s->host_vnet_hdr_len;
 }
 
 int tap_has_vnet_hdr_len(NetClientState *nc, int len)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
-
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
-
+    TAPState *s = TAP_NET_CLIENT(nc);
     return tap_probe_vnet_hdr_len(s->fd, len);
 }
 
 void tap_set_vnet_hdr_len(NetClientState *nc, int len)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
 
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
     assert(len == sizeof(struct virtio_net_hdr_mrg_rxbuf) ||
            len == sizeof(struct virtio_net_hdr));
 
@@ -256,11 +246,10 @@ void tap_set_vnet_hdr_len(NetClientState *nc, int len)
 
 void tap_using_vnet_hdr(NetClientState *nc, int using_vnet_hdr)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
 
     using_vnet_hdr = using_vnet_hdr != 0;
 
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
     assert(!!s->host_vnet_hdr_len == using_vnet_hdr);
 
     s->using_vnet_hdr = using_vnet_hdr;
@@ -269,7 +258,7 @@ void tap_using_vnet_hdr(NetClientState *nc, int using_vnet_hdr)
 void tap_set_offload(NetClientState *nc, int csum, int tso4,
                      int tso6, int ecn, int ufo)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     if (s->fd < 0) {
         return;
     }
@@ -279,7 +268,7 @@ void tap_set_offload(NetClientState *nc, int csum, int tso4,
 
 static void tap_cleanup(NetClientState *nc)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
 
     if (s->vhost_net) {
         vhost_net_cleanup(s->vhost_net);
@@ -299,28 +288,36 @@ static void tap_cleanup(NetClientState *nc)
 
 static void tap_poll(NetClientState *nc, bool enable)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
+    TAPState *s = TAP_NET_CLIENT(nc);
     tap_read_poll(s, enable);
     tap_write_poll(s, enable);
 }
 
 int tap_get_fd(NetClientState *nc)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
+    TAPState *s = TAP_NET_CLIENT(nc);
     return s->fd;
 }
 
 /* fd support */
 
-static NetClientInfo net_tap_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_TAP,
-    .size = sizeof(TAPState),
-    .receive = tap_receive,
-    .receive_raw = tap_receive_raw,
-    .receive_iov = tap_receive_iov,
-    .poll = tap_poll,
-    .cleanup = tap_cleanup,
+static void tap_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "tap";
+    ncc->receive = tap_receive;
+    ncc->receive_raw = tap_receive_raw;
+    ncc->receive_iov = tap_receive_iov;
+    ncc->poll = tap_poll;
+    ncc->cleanup = tap_cleanup;
+}
+
+static TypeInfo tap_net_client_info = {
+    .name = TYPE_TAP_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(TAPState),
+    .class_init = tap_net_client_class_init,
 };
 
 static TAPState *net_tap_fd_init(NetClientState *peer,
@@ -332,9 +329,9 @@ static TAPState *net_tap_fd_init(NetClientState *peer,
     NetClientState *nc;
     TAPState *s;
 
-    nc = qemu_new_net_client(&net_tap_info, peer, model, name);
+    nc = qemu_new_net_client(TYPE_TAP_NET_CLIENT, peer, model, name);
 
-    s = DO_UPCAST(TAPState, nc, nc);
+    s = TAP_NET_CLIENT(nc);
 
     s->fd = fd;
     s->host_vnet_hdr_len = vnet_hdr ? sizeof(struct virtio_net_hdr) : 0;
@@ -711,7 +708,13 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
 
 VHostNetState *tap_get_vhost_net(NetClientState *nc)
 {
-    TAPState *s = DO_UPCAST(TAPState, nc, nc);
-    assert(nc->info->type == NET_CLIENT_OPTIONS_KIND_TAP);
+    TAPState *s = TAP_NET_CLIENT(nc);
     return s->vhost_net;
 }
+
+static void tap_register_types(void)
+{
+    type_register_static(&tap_net_client_info);
+}
+
+type_init(tap_register_types)

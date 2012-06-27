@@ -32,6 +32,10 @@
 #define DEFAULT_NETWORK_SCRIPT "/etc/qemu-ifup"
 #define DEFAULT_NETWORK_DOWN_SCRIPT "/etc/qemu-ifdown"
 
+#define TYPE_TAP_NET_CLIENT "tap-net-client"
+#define TAP_NET_CLIENT(obj) \
+    OBJECT_CHECK(TAPState, obj, TYPE_TAP_NET_CLIENT)
+
 int tap_open(char *ifname, int ifname_size, int *vnet_hdr, int vnet_hdr_required);
 
 ssize_t tap_read_packet(int tapfd, uint8_t *buf, int maxlen);

@@ -1716,12 +1716,34 @@ const VMStateDescription vmstate_pcnet = {
     }
 };
 
-void pcnet_common_cleanup(PCNetState *d)
+static void pcnet_common_cleanup(NetClientState *nc)
 {
+    NICState *nic = DO_UPCAST(NICState, nc, nc);
+    PCNetState *d = nic->opaque;
+
     d->nic = NULL;
 }
 
-int pcnet_common_init(DeviceState *dev, PCNetState *s, NetClientInfo *info)
+#define TYPE_PCNET_NET_CLIENT "pcnet-net-client"
+
+static void pcnet_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = pcnet_can_receive;
+    ncc->receive = pcnet_receive;
+    ncc->link_status_changed = pcnet_set_link_status;
+    ncc->cleanup = pcnet_common_cleanup;
+}
+
+static TypeInfo pcnet_net_client_info = {
+    .name = TYPE_PCNET_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = pcnet_net_client_class_init,
+};
+
+int pcnet_common_init(DeviceState *dev, PCNetState *s)
 {
     int i;
     uint16_t checksum;
@@ -1729,7 +1751,8 @@ int pcnet_common_init(DeviceState *dev, PCNetState *s, NetClientInfo *info)
     s->poll_timer = qemu_new_timer_ns(vm_clock, pcnet_poll_timer, s);
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(info, &s->conf, object_get_typename(OBJECT(dev)), dev->id, s);
+    s->nic = qemu_new_nic(TYPE_PCNET_NET_CLIENT, &s->conf,
+                          object_get_typename(OBJECT(dev)), dev->id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
     add_boot_device_path(s->conf.bootindex, dev, "/ethernet-phy@0");
@@ -1765,3 +1788,10 @@ int pcnet_common_init(DeviceState *dev, PCNetState *s, NetClientInfo *info)
 
     return 0;
 }
+
+static void pcnet_register_types(void)
+{
+    type_register_static(&pcnet_net_client_info);
+}
+
+type_init(pcnet_register_types)

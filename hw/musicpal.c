@@ -373,12 +373,23 @@ static void eth_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_mv88w8618_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = eth_can_receive,
-    .receive = eth_receive,
-    .cleanup = eth_cleanup,
+#define TYPE_MV88W8618_NET_CLIENT "mv88w8618-net-client"
+
+static void mv88w8618_net_client_class_init(ObjectClass *klass,
+                                            void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = eth_can_receive;
+    ncc->receive = eth_receive;
+    ncc->cleanup = eth_cleanup;
+}
+
+static TypeInfo mv88w8618_net_client_info = {
+    .name = TYPE_MV88W8618_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = mv88w8618_net_client_class_init,
 };
 
 static int mv88w8618_eth_init(SysBusDevice *dev)
@@ -386,7 +397,7 @@ static int mv88w8618_eth_init(SysBusDevice *dev)
     mv88w8618_eth_state *s = FROM_SYSBUS(mv88w8618_eth_state, dev);
 
     sysbus_init_irq(dev, &s->irq);
-    s->nic = qemu_new_nic(&net_mv88w8618_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_MV88W8618_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     memory_region_init_io(&s->iomem, &mv88w8618_eth_ops, s, "mv88w8618-eth",
                           MP_ETH_SIZE);
@@ -1692,6 +1703,7 @@ static void musicpal_register_types(void)
     type_register_static(&musicpal_lcd_info);
     type_register_static(&musicpal_gpio_info);
     type_register_static(&musicpal_key_info);
+    type_register_static(&mv88w8618_net_client_info);
 }
 
 type_init(musicpal_register_types)

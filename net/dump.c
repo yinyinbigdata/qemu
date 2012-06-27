@@ -93,11 +93,22 @@ static void dump_cleanup(NetClientState *nc)
     close(s->fd);
 }
 
-static NetClientInfo net_dump_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_DUMP,
-    .size = sizeof(DumpState),
-    .receive = dump_receive,
-    .cleanup = dump_cleanup,
+#define TYPE_DUMP_NET_CLIENT "dump-net-client"
+
+static void net_dump_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "dump",
+    ncc->receive = dump_receive;
+    ncc->cleanup = dump_cleanup;
+}
+
+static TypeInfo net_dump_info = {
+    .name = TYPE_DUMP_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(DumpState),
+    .class_init = net_dump_class_init,
 };
 
 static int net_dump_init(NetClientState *peer, const char *device,
@@ -129,7 +140,7 @@ static int net_dump_init(NetClientState *peer, const char *device,
         return -1;
     }
 
-    nc = qemu_new_net_client(&net_dump_info, peer, device, name);
+    nc = qemu_new_net_client(TYPE_DUMP_NET_CLIENT, peer, device, name);
 
     snprintf(nc->info_str, sizeof(nc->info_str),
              "dump to %s (len=%d)", filename, len);
@@ -183,3 +194,10 @@ int net_init_dump(const NetClientOptions *opts, const char *name,
 
     return net_dump_init(peer, "dump", name, file, len);
 }
+
+static void net_dump_register_types(void)
+{
+    type_register_static(&net_dump_info);
+}
+
+type_init(net_dump_register_types)

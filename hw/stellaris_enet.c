@@ -392,12 +392,23 @@ static void stellaris_enet_cleanup(NetClientState *nc)
     g_free(s);
 }
 
-static NetClientInfo net_stellaris_enet_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = stellaris_enet_can_receive,
-    .receive = stellaris_enet_receive,
-    .cleanup = stellaris_enet_cleanup,
+#define TYPE_STELLARIS_ENET_NET_CLIENT "stellaris-enet-net-client"
+
+static void stellaris_enet_net_client_class_init(ObjectClass *klass,
+                                                 void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = stellaris_enet_can_receive;
+    ncc->receive = stellaris_enet_receive;
+    ncc->cleanup = stellaris_enet_cleanup;
+}
+
+static TypeInfo stellaris_enet_net_client_info = {
+    .name = TYPE_STELLARIS_ENET_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = stellaris_enet_net_client_class_init,
 };
 
 static int stellaris_enet_init(SysBusDevice *dev)
@@ -410,7 +421,7 @@ static int stellaris_enet_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
 
-    s->nic = qemu_new_nic(&net_stellaris_enet_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_STELLARIS_ENET_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -444,6 +455,7 @@ static TypeInfo stellaris_enet_info = {
 static void stellaris_enet_register_types(void)
 {
     type_register_static(&stellaris_enet_info);
+    type_register_static(&stellaris_enet_net_client_info);
 }
 
 type_init(stellaris_enet_register_types)

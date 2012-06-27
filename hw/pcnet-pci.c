@@ -264,13 +264,6 @@ static void pci_physical_memory_read(void *dma_opaque, hwaddr addr,
     pci_dma_read(dma_opaque, addr, buf, len);
 }
 
-static void pci_pcnet_cleanup(NetClientState *nc)
-{
-    PCNetState *d = DO_UPCAST(NICState, nc, nc)->opaque;
-
-    pcnet_common_cleanup(d);
-}
-
 static void pci_pcnet_uninit(PCIDevice *dev)
 {
     PCIPCNetState *d = DO_UPCAST(PCIPCNetState, pci_dev, dev);
@@ -281,15 +274,6 @@ static void pci_pcnet_uninit(PCIDevice *dev)
     qemu_free_timer(d->state.poll_timer);
     qemu_del_net_client(&d->state.nic->nc);
 }
-
-static NetClientInfo net_pci_pcnet_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = pcnet_can_receive,
-    .receive = pcnet_receive,
-    .link_status_changed = pcnet_set_link_status,
-    .cleanup = pci_pcnet_cleanup,
-};
 
 static int pci_pcnet_init(PCIDevice *pci_dev)
 {
@@ -329,7 +313,7 @@ static int pci_pcnet_init(PCIDevice *pci_dev)
     s->phys_mem_write = pci_physical_memory_write;
     s->dma_opaque = pci_dev;
 
-    return pcnet_common_init(&pci_dev->qdev, s, &net_pci_pcnet_info);
+    return pcnet_common_init(&pci_dev->qdev, s);
 }
 
 static void pci_reset(DeviceState *dev)

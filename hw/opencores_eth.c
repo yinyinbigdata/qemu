@@ -466,13 +466,24 @@ static void open_eth_cleanup(NetClientState *nc)
 {
 }
 
-static NetClientInfo net_open_eth_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = open_eth_can_receive,
-    .receive = open_eth_receive,
-    .cleanup = open_eth_cleanup,
-    .link_status_changed = open_eth_set_link_status,
+#define TYPE_OPEN_ETH_NET_CLIENT "open-eth-net-client"
+
+static void open_eth_net_client_class_init(ObjectClass *klass,
+                                           void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = open_eth_can_receive;
+    ncc->receive = open_eth_receive;
+    ncc->cleanup = open_eth_cleanup;
+    ncc->link_status_changed = open_eth_set_link_status;
+}
+
+static TypeInfo open_eth_net_client_info = {
+    .name = TYPE_OPEN_ETH_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = open_eth_net_client_class_init,
 };
 
 static void open_eth_start_xmit(OpenEthState *s, desc *tx)
@@ -691,7 +702,7 @@ static int sysbus_open_eth_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &s->irq);
 
-    s->nic = qemu_new_nic(&net_open_eth_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_OPEN_ETH_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(s)), s->dev.qdev.id, s);
     return 0;
 }
@@ -728,6 +739,7 @@ static TypeInfo open_eth_info = {
 static void open_eth_register_types(void)
 {
     type_register_static(&open_eth_info);
+    type_register_static(&open_eth_net_client_info);
 }
 
 type_init(open_eth_register_types)

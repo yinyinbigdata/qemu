@@ -300,11 +300,21 @@ static ssize_t net_rx_packet(NetClientState *nc, const uint8_t *buf, size_t size
 
 /* ------------------------------------------------------------- */
 
-static NetClientInfo net_xen_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = net_rx_ok,
-    .receive = net_rx_packet,
+#define TYPE_XEN_NET_CLIENT "xen-net-client"
+
+static void xen_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = net_rx_ok;
+    ncc->receive = net_rx_packet;
+}
+
+static TypeInfo xen_net_client_info = {
+    .name = TYPE_XEN_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = xen_net_client_class_init,
 };
 
 static int net_init(struct XenDevice *xendev)
@@ -327,7 +337,7 @@ static int net_init(struct XenDevice *xendev)
 
     netdev->conf.peer = NULL;
 
-    netdev->nic = qemu_new_nic(&net_xen_info, &netdev->conf,
+    netdev->nic = qemu_new_nic(TYPE_XEN_NET_CLIENT, &netdev->conf,
                                "xen", NULL, netdev);
 
     snprintf(netdev->nic->nc.info_str, sizeof(netdev->nic->nc.info_str),
@@ -437,3 +447,10 @@ struct XenDevOps xen_netdev_ops = {
     .disconnect = net_disconnect,
     .free       = net_free,
 };
+
+static void xen_net_register_types(void)
+{
+    type_register_static(&xen_net_client_info);
+}
+
+type_init(xen_net_register_types)

@@ -155,8 +155,10 @@ void qemu_macaddr_default_if_unset(MACAddr *macaddr)
 
 static void notify_link_status_changed(NetClientState *nc)
 {
-    if (nc->info->link_status_changed) {
-        nc->info->link_status_changed(nc);
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
+
+    if (klass->link_status_changed) {
+        klass->link_status_changed(nc);
     }
 }
 
@@ -188,18 +190,15 @@ static char *assign_name(NetClientState *nc1, const char *model)
     return g_strdup(buf);
 }
 
-NetClientState *qemu_new_net_client(NetClientInfo *info,
+NetClientState *qemu_new_net_client(const char *typename,
                                     NetClientState *peer,
                                     const char *model,
                                     const char *name)
 {
     NetClientState *nc;
 
-    assert(info->size >= sizeof(NetClientState));
+    nc = NET_CLIENT(object_new(typename));
 
-    nc = g_malloc0(info->size);
-
-    nc->info = info;
     nc->model = g_strdup(model);
     if (name) {
         nc->name = g_strdup(name);
@@ -219,7 +218,7 @@ NetClientState *qemu_new_net_client(NetClientInfo *info,
     return nc;
 }
 
-NICState *qemu_new_nic(NetClientInfo *info,
+NICState *qemu_new_nic(const char *typename,
                        NICConf *conf,
                        const char *model,
                        const char *name,
@@ -228,12 +227,9 @@ NICState *qemu_new_nic(NetClientInfo *info,
     NetClientState *nc;
     NICState *nic;
 
-    assert(info->type == NET_CLIENT_OPTIONS_KIND_NIC);
-    assert(info->size >= sizeof(NICState));
+    nc = qemu_new_net_client(typename, conf->peer, model, name);
 
-    nc = qemu_new_net_client(info, conf->peer, model, name);
-
-    nic = DO_UPCAST(NICState, nc, nc);
+    nic = NIC_NET_CLIENT(nc);
     nic->conf = conf;
     nic->opaque = opaque;
 
@@ -242,10 +238,12 @@ NICState *qemu_new_nic(NetClientInfo *info,
 
 static void qemu_cleanup_net_client(NetClientState *nc)
 {
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
+
     QTAILQ_REMOVE(&net_clients, nc, next);
 
-    if (nc->info->cleanup) {
-        nc->info->cleanup(nc);
+    if (klass->cleanup) {
+        klass->cleanup(nc);
     }
 }
 
@@ -259,14 +257,15 @@ static void qemu_free_net_client(NetClientState *nc)
     }
     g_free(nc->name);
     g_free(nc->model);
-    g_free(nc);
+    object_delete(OBJECT(nc));
 }
 
 void qemu_del_net_client(NetClientState *nc)
 {
     /* If there is a peer NIC, delete and cleanup client, but do not free. */
-    if (nc->peer && nc->peer->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
-        NICState *nic = DO_UPCAST(NICState, nc, nc->peer);
+    if (nc->peer && object_dynamic_cast(OBJECT(nc->peer),
+                                        TYPE_NIC_NET_CLIENT)) {
+        NICState *nic = NIC_NET_CLIENT(nc->peer);
         if (nic->peer_deleted) {
             return;
         }
@@ -279,8 +278,8 @@ void qemu_del_net_client(NetClientState *nc)
     }
 
     /* If this is a peer NIC and peer has already been deleted, free it now. */
-    if (nc->peer && nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
-        NICState *nic = DO_UPCAST(NICState, nc, nc);
+    if (nc->peer && object_dynamic_cast(OBJECT(nc), TYPE_NIC_NET_CLIENT)) {
+        NICState *nic = NIC_NET_CLIENT(nc);
         if (nic->peer_deleted) {
             qemu_free_net_client(nc->peer);
         }
@@ -295,22 +294,26 @@ void qemu_foreach_nic(qemu_nic_foreach func, void *opaque)
     NetClientState *nc;
 
     QTAILQ_FOREACH(nc, &net_clients, next) {
-        if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC) {
-            func(DO_UPCAST(NICState, nc, nc), opaque);
+        if (object_dynamic_cast(OBJECT(nc), TYPE_NIC_NET_CLIENT)) {
+            func(NIC_NET_CLIENT(nc), opaque);
         }
     }
 }
 
 int qemu_can_send_packet(NetClientState *sender)
 {
+    NetClientClass *klass;
+
     if (!sender->peer) {
         return 1;
     }
 
     if (sender->peer->receive_disabled) {
         return 0;
-    } else if (sender->peer->info->can_receive &&
-               !sender->peer->info->can_receive(sender->peer)) {
+    }
+
+    klass = NET_CLIENT_GET_CLASS(sender->peer);
+    if (klass->can_receive && !klass->can_receive(sender->peer)) {
         return 0;
     }
     return 1;
@@ -323,6 +326,7 @@ ssize_t qemu_deliver_packet(NetClientState *sender,
                             void *opaque)
 {
     NetClientState *nc = opaque;
+    NetClientClass *klass;
     ssize_t ret;
 
     if (nc->link_down) {
@@ -333,10 +337,11 @@ ssize_t qemu_deliver_packet(NetClientState *sender,
         return 0;
     }
 
-    if (flags & QEMU_NET_PACKET_FLAG_RAW && nc->info->receive_raw) {
-        ret = nc->info->receive_raw(nc, data, size);
+    klass = NET_CLIENT_GET_CLASS(nc);
+    if (flags & QEMU_NET_PACKET_FLAG_RAW && klass->receive_raw) {
+        ret = klass->receive_raw(nc, data, size);
     } else {
-        ret = nc->info->receive(nc, data, size);
+        ret = klass->receive(nc, data, size);
     }
 
     if (ret == 0) {
@@ -410,12 +415,13 @@ ssize_t qemu_send_packet_raw(NetClientState *nc, const uint8_t *buf, int size)
 static ssize_t nc_sendv_compat(NetClientState *nc, const struct iovec *iov,
                                int iovcnt)
 {
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
     uint8_t buffer[4096];
     size_t offset;
 
     offset = iov_to_buf(iov, iovcnt, 0, buffer, sizeof(buffer));
 
-    return nc->info->receive(nc, buffer, offset);
+    return klass->receive(nc, buffer, offset);
 }
 
 ssize_t qemu_deliver_packet_iov(NetClientState *sender,
@@ -425,6 +431,7 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
                                 void *opaque)
 {
     NetClientState *nc = opaque;
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
     int ret;
 
     if (nc->link_down) {
@@ -435,8 +442,8 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
         return 0;
     }
 
-    if (nc->info->receive_iov) {
-        ret = nc->info->receive_iov(nc, iov, iovcnt);
+    if (klass->receive_iov) {
+        ret = klass->receive_iov(nc, iov, iovcnt);
     } else {
         ret = nc_sendv_compat(nc, iov, iovcnt);
     }
@@ -473,8 +480,10 @@ qemu_sendv_packet(NetClientState *nc, const struct iovec *iov, int iovcnt)
 
 void qemu_net_poll(NetClientState *nc, bool enable)
 {
-    if (nc->info->poll) {
-        nc->info->poll(nc, enable);
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
+
+    if (klass->poll) {
+        klass->poll(nc, enable);
     }
 }
 
@@ -483,8 +492,9 @@ NetClientState *qemu_find_netdev(const char *id)
     NetClientState *nc;
 
     QTAILQ_FOREACH(nc, &net_clients, next) {
-        if (nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC)
+        if (object_dynamic_cast(OBJECT(nc), TYPE_NIC_NET_CLIENT)) {
             continue;
+        }
         if (!strcmp(nc->name, id)) {
             return nc;
         }
@@ -859,30 +869,30 @@ void qmp_netdev_del(const char *id, Error **errp)
 
 void print_net_client(Monitor *mon, NetClientState *nc)
 {
+    NetClientClass *klass = NET_CLIENT_GET_CLASS(nc);
+
     monitor_printf(mon, "%s: type=%s,%s\n", nc->name,
-                   NetClientOptionsKind_lookup[nc->info->type], nc->info_str);
+                   klass->type_str, nc->info_str);
 }
 
 void do_info_network(Monitor *mon)
 {
     NetClientState *nc, *peer;
-    NetClientOptionsKind type;
 
     net_hub_info(mon);
 
     QTAILQ_FOREACH(nc, &net_clients, next) {
         peer = nc->peer;
-        type = nc->info->type;
 
         /* Skip if already printed in hub info */
         if (net_hub_id_for_client(nc, NULL) == 0) {
             continue;
         }
 
-        if (!peer || type == NET_CLIENT_OPTIONS_KIND_NIC) {
+        if (!peer || object_dynamic_cast(OBJECT(nc), TYPE_NIC_NET_CLIENT)) {
             print_net_client(mon, nc);
         } /* else it's a netdev connected to a NIC, printed with the NIC */
-        if (peer && type == NET_CLIENT_OPTIONS_KIND_NIC) {
+        if (peer && object_dynamic_cast(OBJECT(nc), TYPE_NIC_NET_CLIENT)) {
             monitor_printf(mon, " \\ ");
             print_net_client(mon, peer);
         }
@@ -951,8 +961,9 @@ void net_check_clients(void)
     QTAILQ_FOREACH(nc, &net_clients, next) {
         if (!nc->peer) {
             fprintf(stderr, "Warning: %s %s has no peer\n",
-                    nc->info->type == NET_CLIENT_OPTIONS_KIND_NIC ?
-                    "nic" : "netdev", nc->name);
+                    object_dynamic_cast(OBJECT(nc),
+                        TYPE_NIC_NET_CLIENT) ? "nic" : "netdev",
+                    nc->name);
         }
     }
 
@@ -1063,3 +1074,34 @@ unsigned compute_mcast_idx(const uint8_t *ep)
     }
     return crc >> 26;
 }
+
+static TypeInfo net_client_info = {
+    .name = TYPE_NET_CLIENT,
+    .parent = TYPE_OBJECT,
+    .instance_size = sizeof(NetClientState),
+    .class_size = sizeof(NetClientClass),
+    .abstract = true,
+};
+
+static void nic_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "nic";
+}
+
+static TypeInfo nic_net_client_info = {
+    .name = TYPE_NIC_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = nic_net_client_class_init,
+    .abstract = true,
+};
+
+static void net_client_register_types(void)
+{
+    type_register_static(&net_client_info);
+    type_register_static(&nic_net_client_info);
+}
+
+type_init(net_client_register_types)

@@ -1160,13 +1160,23 @@ static void gem_set_link(NetClientState *nc)
     phy_update_link(DO_UPCAST(NICState, nc, nc)->opaque);
 }
 
-static NetClientInfo net_gem_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = gem_can_receive,
-    .receive = gem_receive,
-    .cleanup = gem_cleanup,
-    .link_status_changed = gem_set_link,
+#define TYPE_GEM_NET_CLIENT "gem-net-client"
+
+static void gem_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = gem_can_receive;
+    ncc->receive = gem_receive;
+    ncc->cleanup = gem_cleanup;
+    ncc->link_status_changed = gem_set_link;
+}
+
+static TypeInfo gem_net_client_info = {
+    .name = TYPE_GEM_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = gem_net_client_class_init,
 };
 
 static int gem_init(SysBusDevice *dev)
@@ -1182,7 +1192,7 @@ static int gem_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
 
-    s->nic = qemu_new_nic(&net_gem_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_GEM_NET_CLIENT, &s->conf,
             object_get_typename(OBJECT(dev)), dev->qdev.id, s);
 
     return 0;
@@ -1228,6 +1238,7 @@ static TypeInfo gem_info = {
 static void gem_register_types(void)
 {
     type_register_static(&gem_info);
+    type_register_static(&gem_net_client_info);
 }
 
 type_init(gem_register_types)

@@ -1326,12 +1326,22 @@ static void usb_net_handle_destroy(USBDevice *dev)
     qemu_del_net_client(&s->nic->nc);
 }
 
-static NetClientInfo net_usbnet_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = usbnet_can_receive,
-    .receive = usbnet_receive,
-    .cleanup = usbnet_cleanup,
+#define TYPE_USB_NET_CLIENT "usb-net-client"
+
+static void usb_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = usbnet_can_receive;
+    ncc->receive = usbnet_receive;
+    ncc->cleanup = usbnet_cleanup;
+}
+
+static TypeInfo usb_net_client_info = {
+    .name = TYPE_USB_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = usb_net_client_class_init,
 };
 
 static int usb_net_initfn(USBDevice *dev)
@@ -1351,7 +1361,7 @@ static int usb_net_initfn(USBDevice *dev)
     s->vendorid = 0x1234;
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(&net_usbnet_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_USB_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(s)), s->dev.qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     snprintf(s->usbstring_mac, sizeof(s->usbstring_mac),
@@ -1436,6 +1446,7 @@ static void usb_net_register_types(void)
 {
     type_register_static(&net_info);
     usb_legacy_register("usb-net", "net", usb_net_init);
+    type_register_static(&usb_net_client_info);
 }
 
 type_init(usb_net_register_types)

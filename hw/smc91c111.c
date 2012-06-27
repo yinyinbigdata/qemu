@@ -735,12 +735,23 @@ static void smc91c111_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_smc91c111_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = smc91c111_can_receive,
-    .receive = smc91c111_receive,
-    .cleanup = smc91c111_cleanup,
+#define TYPE_SMC91C111_NET_CLIENT "smc91c111-net-client"
+
+static void smc91c111_net_client_class_init(ObjectClass *klass,
+                                            void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = smc91c111_can_receive;
+    ncc->receive = smc91c111_receive;
+    ncc->cleanup = smc91c111_cleanup;
+}
+
+static TypeInfo smc91c111_net_client_info = {
+    .name = TYPE_SMC91C111_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = smc91c111_net_client_class_init,
 };
 
 static int smc91c111_init1(SysBusDevice *dev)
@@ -751,7 +762,7 @@ static int smc91c111_init1(SysBusDevice *dev)
     sysbus_init_mmio(dev, &s->mmio);
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(&net_smc91c111_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_SMC91C111_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     /* ??? Save/restore.  */
@@ -784,6 +795,7 @@ static TypeInfo smc91c111_info = {
 static void smc91c111_register_types(void)
 {
     type_register_static(&smc91c111_info);
+    type_register_static(&smc91c111_net_client_info);
 }
 
 /* Legacy helper function.  Should go away when machine config files are

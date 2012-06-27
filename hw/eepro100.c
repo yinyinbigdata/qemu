@@ -1852,12 +1852,23 @@ static void pci_nic_uninit(PCIDevice *pci_dev)
     qemu_del_net_client(&s->nic->nc);
 }
 
-static NetClientInfo net_eepro100_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = nic_can_receive,
-    .receive = nic_receive,
-    .cleanup = nic_cleanup,
+#define TYPE_EEPRO100_NET_CLIENT "eepro100-net-client"
+
+static void eepro100_net_client_class_init(ObjectClass *klass,
+                                           void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = nic_can_receive;
+    ncc->receive = nic_receive;
+    ncc->cleanup = nic_cleanup;
+}
+
+static TypeInfo eepro100_net_client_info = {
+    .name = TYPE_EEPRO100_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = eepro100_net_client_class_init,
 };
 
 static int e100_nic_init(PCIDevice *pci_dev)
@@ -1892,7 +1903,7 @@ static int e100_nic_init(PCIDevice *pci_dev)
 
     nic_reset(s);
 
-    s->nic = qemu_new_nic(&net_eepro100_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_EEPRO100_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(pci_dev)), pci_dev->qdev.id, s);
 
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
@@ -2110,6 +2121,8 @@ static void eepro100_register_types(void)
         
         type_register(&type_info);
     }
+
+    type_register_static(&eepro100_net_client_info);
 }
 
 type_init(eepro100_register_types)

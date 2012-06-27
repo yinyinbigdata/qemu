@@ -28,6 +28,8 @@ typedef struct NE2000State {
     uint8_t mem[NE2000_MEM_SIZE];
 } NE2000State;
 
+#define TYPE_NE2000_NET_CLIENT "ne2000-net-client"
+
 void ne2000_setup_io(NE2000State *s, unsigned size);
 extern const VMStateDescription vmstate_ne2000;
 void ne2000_reset(NE2000State *s);

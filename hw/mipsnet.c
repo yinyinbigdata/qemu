@@ -216,12 +216,22 @@ static void mipsnet_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_mipsnet_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = mipsnet_can_receive,
-    .receive = mipsnet_receive,
-    .cleanup = mipsnet_cleanup,
+#define TYPE_MIPSNET_NET_CLIENT "mipsnet-net-client"
+
+static void mipsnet_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = mipsnet_can_receive;
+    ncc->receive = mipsnet_receive;
+    ncc->cleanup = mipsnet_cleanup;
+}
+
+static TypeInfo mipsnet_net_client_info = {
+    .name = TYPE_MIPSNET_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = mipsnet_net_client_class_init,
 };
 
 static const MemoryRegionOps mipsnet_ioport_ops = {
@@ -239,7 +249,7 @@ static int mipsnet_sysbus_init(SysBusDevice *dev)
     sysbus_init_mmio(dev, &s->io);
     sysbus_init_irq(dev, &s->irq);
 
-    s->nic = qemu_new_nic(&net_mipsnet_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_MIPSNET_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -279,6 +289,7 @@ static TypeInfo mipsnet_info = {
 static void mipsnet_register_types(void)
 {
     type_register_static(&mipsnet_info);
+    type_register_static(&mipsnet_net_client_info);
 }
 
 type_init(mipsnet_register_types)

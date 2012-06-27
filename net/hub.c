@@ -129,13 +129,27 @@ static void net_hub_port_cleanup(NetClientState *nc)
     QLIST_REMOVE(port, next);
 }
 
-static NetClientInfo net_hub_port_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_HUBPORT,
-    .size = sizeof(NetHubPort),
-    .can_receive = net_hub_port_can_receive,
-    .receive = net_hub_port_receive,
-    .receive_iov = net_hub_port_receive_iov,
-    .cleanup = net_hub_port_cleanup,
+#define TYPE_HUB_PORT_NET_CLIENT "hub-port-net-client"
+#define HUB_PORT(obj) \
+    OBJECT_CHECK(NetHubPort, obj, TYPE_HUB_PORT_NET_CLIENT)
+
+static void net_hub_port_net_client_class_init(ObjectClass *klass,
+                                               void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "hubport",
+    ncc->can_receive = net_hub_port_can_receive;
+    ncc->receive = net_hub_port_receive;
+    ncc->receive_iov = net_hub_port_receive_iov;
+    ncc->cleanup = net_hub_port_cleanup;
+}
+
+static TypeInfo hub_port_net_client_info = {
+    .name = TYPE_HUB_PORT_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(NetHubPort),
+    .class_init = net_hub_port_net_client_class_init,
 };
 
 static NetHubPort *net_hub_port_new(NetHub *hub, const char *name)
@@ -151,8 +165,8 @@ static NetHubPort *net_hub_port_new(NetHub *hub, const char *name)
         name = default_name;
     }
 
-    nc = qemu_new_net_client(&net_hub_port_info, NULL, "hub", name);
-    port = DO_UPCAST(NetHubPort, nc, nc);
+    nc = qemu_new_net_client(TYPE_HUB_PORT_NET_CLIENT, NULL, "hub", name);
+    port = HUB_PORT(nc);
     port->id = id;
     port->hub = hub;
 
@@ -262,12 +276,13 @@ int net_hub_id_for_client(NetClientState *nc, int *id)
 {
     NetHubPort *port;
 
-    if (nc->info->type == NET_CLIENT_OPTIONS_KIND_HUBPORT) {
-        port = DO_UPCAST(NetHubPort, nc, nc);
-    } else if (nc->peer != NULL && nc->peer->info->type ==
-            NET_CLIENT_OPTIONS_KIND_HUBPORT) {
-        port = DO_UPCAST(NetHubPort, nc, nc->peer);
-    } else {
+    port = (NetHubPort *)object_dynamic_cast(OBJECT(nc),
+                                             TYPE_HUB_PORT_NET_CLIENT);
+    if (!port && nc->peer) {
+        port = (NetHubPort *)object_dynamic_cast(OBJECT(nc->peer),
+                                                 TYPE_HUB_PORT_NET_CLIENT);
+    }
+    if (!port) {
         return -ENOENT;
     }
 
@@ -314,18 +329,10 @@ void net_hub_check_clients(void)
                 continue;
             }
 
-            switch (peer->info->type) {
-            case NET_CLIENT_OPTIONS_KIND_NIC:
+            if (object_dynamic_cast(OBJECT(peer), TYPE_NIC_NET_CLIENT)) {
                 has_nic = 1;
-                break;
-            case NET_CLIENT_OPTIONS_KIND_USER:
-            case NET_CLIENT_OPTIONS_KIND_TAP:
-            case NET_CLIENT_OPTIONS_KIND_SOCKET:
-            case NET_CLIENT_OPTIONS_KIND_VDE:
+            } else {
                 has_host_dev = 1;
-                break;
-            default:
-                break;
             }
         }
         if (has_host_dev && !has_nic) {
@@ -338,3 +345,10 @@ void net_hub_check_clients(void)
         }
     }
 }
+
+static void net_hub_register_types(void)
+{
+    type_register_static(&hub_port_net_client_info);
+}
+
+type_init(net_hub_register_types)

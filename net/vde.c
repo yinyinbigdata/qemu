@@ -67,11 +67,22 @@ static void vde_cleanup(NetClientState *nc)
     vde_close(s->vde);
 }
 
-static NetClientInfo net_vde_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_VDE,
-    .size = sizeof(VDEState),
-    .receive = vde_receive,
-    .cleanup = vde_cleanup,
+#define TYPE_VDE_NET_CLIENT "vde-net-client"
+
+static void vde_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "vde";
+    ncc->receive = vde_receive;
+    ncc->cleanup = vde_cleanup;
+}
+
+static TypeInfo vde_net_client_info = {
+    .name = TYPE_VDE_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(VDEState),
+    .class_init = vde_net_client_class_init,
 };
 
 static int net_vde_init(NetClientState *peer, const char *model,
@@ -125,3 +136,10 @@ int net_init_vde(const NetClientOptions *opts, const char *name,
 
     return 0;
 }
+
+static void vde_register_types(void)
+{
+    type_register_static(&vde_net_client_info);
+}
+
+type_init(vde_register_types)

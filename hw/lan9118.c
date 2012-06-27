@@ -1311,13 +1311,23 @@ static void lan9118_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_lan9118_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = lan9118_can_receive,
-    .receive = lan9118_receive,
-    .cleanup = lan9118_cleanup,
-    .link_status_changed = lan9118_set_link,
+#define TYPE_LAN9118_NET_CLIENT "lan9118-net-client"
+
+static void lan9118_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = lan9118_can_receive;
+    ncc->receive = lan9118_receive;
+    ncc->cleanup = lan9118_cleanup;
+    ncc->link_status_changed = lan9118_set_link;
+}
+
+static TypeInfo lan9118_net_client_info = {
+    .name = TYPE_LAN9118_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = lan9118_net_client_class_init,
 };
 
 static int lan9118_init1(SysBusDevice *dev)
@@ -1333,7 +1343,7 @@ static int lan9118_init1(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
 
-    s->nic = qemu_new_nic(&net_lan9118_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_LAN9118_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     s->eeprom[0] = 0xa5;
@@ -1378,6 +1388,7 @@ static TypeInfo lan9118_info = {
 static void lan9118_register_types(void)
 {
     type_register_static(&lan9118_info);
+    type_register_static(&lan9118_net_client_info);
 }
 
 /* Legacy helper function.  Should go away when machine config files are

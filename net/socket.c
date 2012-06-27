@@ -33,6 +33,10 @@
 #include "qemu_socket.h"
 #include "iov.h"
 
+#define TYPE_SOCKET_NET_CLIENT "socket-net-client"
+#define SOCKET_NET_CLIENT(obj) \
+    OBJECT_CHECK(NetSocketState, obj, TYPE_SOCKET_NET_CLIENT)
+
 typedef struct NetSocketState {
     NetClientState nc;
     int listen_fd;
@@ -44,6 +48,8 @@ typedef struct NetSocketState {
     uint8_t buf[4096];
     struct sockaddr_in dgram_dst; /* contains inet host and port destination iff connectionless (SOCK_DGRAM) */
     IOHandler *send_fn;           /* differs between SOCK_STREAM/SOCK_DGRAM */
+    ssize_t (*receive_fn)(struct NetSocketState *s, const uint8_t *buf,
+                          size_t size);
     bool read_poll;               /* waiting to receive data? */
     bool write_poll;              /* waiting to transmit data? */
 } NetSocketState;
@@ -89,9 +95,9 @@ static void net_socket_writable(void *opaque)
     qemu_flush_queued_packets(&s->nc);
 }
 
-static ssize_t net_socket_receive(NetClientState *nc, const uint8_t *buf, size_t size)
+static ssize_t net_socket_receive_stream(NetSocketState *s, const uint8_t *buf,
+                                         size_t size)
 {
-    NetSocketState *s = DO_UPCAST(NetSocketState, nc, nc);
     uint32_t len = htonl(size);
     struct iovec iov[] = {
         {
@@ -124,9 +130,9 @@ static ssize_t net_socket_receive(NetClientState *nc, const uint8_t *buf, size_t
     return size;
 }
 
-static ssize_t net_socket_receive_dgram(NetClientState *nc, const uint8_t *buf, size_t size)
+static ssize_t net_socket_receive_dgram(NetSocketState *s, const uint8_t *buf,
+                                        size_t size)
 {
-    NetSocketState *s = DO_UPCAST(NetSocketState, nc, nc);
     ssize_t ret;
 
     do {
@@ -140,6 +146,13 @@ static ssize_t net_socket_receive_dgram(NetClientState *nc, const uint8_t *buf, 
         return 0;
     }
     return ret;
+}
+
+static ssize_t net_socket_receive(NetClientState *nc, const uint8_t *buf,
+                                  size_t size)
+{
+    NetSocketState *s = SOCKET_NET_CLIENT(nc);
+    return s->receive_fn(s, buf, size);
 }
 
 static void net_socket_send(void *opaque)
@@ -320,7 +333,7 @@ fail:
 
 static void net_socket_cleanup(NetClientState *nc)
 {
-    NetSocketState *s = DO_UPCAST(NetSocketState, nc, nc);
+    NetSocketState *s = SOCKET_NET_CLIENT(nc);
     if (s->fd != -1) {
         net_socket_read_poll(s, false);
         net_socket_write_poll(s, false);
@@ -333,13 +346,6 @@ static void net_socket_cleanup(NetClientState *nc)
         s->listen_fd = -1;
     }
 }
-
-static NetClientInfo net_dgram_socket_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_SOCKET,
-    .size = sizeof(NetSocketState),
-    .receive = net_socket_receive_dgram,
-    .cleanup = net_socket_cleanup,
-};
 
 static NetSocketState *net_socket_fd_init_dgram(NetClientState *peer,
                                                 const char *model,
@@ -383,18 +389,19 @@ static NetSocketState *net_socket_fd_init_dgram(NetClientState *peer,
         }
     }
 
-    nc = qemu_new_net_client(&net_dgram_socket_info, peer, model, name);
+    nc = qemu_new_net_client(TYPE_SOCKET_NET_CLIENT, peer, model, name);
 
     snprintf(nc->info_str, sizeof(nc->info_str),
             "socket: fd=%d (%s mcast=%s:%d)",
             fd, is_connected ? "cloned" : "",
             inet_ntoa(saddr.sin_addr), ntohs(saddr.sin_port));
 
-    s = DO_UPCAST(NetSocketState, nc, nc);
+    s = SOCKET_NET_CLIENT(nc);
 
     s->fd = fd;
     s->listen_fd = -1;
     s->send_fn = net_socket_send_dgram;
+    s->receive_fn = net_socket_receive_dgram;
     net_socket_read_poll(s, true);
 
     /* mcast: save bound address as dst */
@@ -413,15 +420,9 @@ static void net_socket_connect(void *opaque)
 {
     NetSocketState *s = opaque;
     s->send_fn = net_socket_send;
+    s->receive_fn = net_socket_receive_stream;
     net_socket_read_poll(s, true);
 }
-
-static NetClientInfo net_socket_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_SOCKET,
-    .size = sizeof(NetSocketState),
-    .receive = net_socket_receive,
-    .cleanup = net_socket_cleanup,
-};
 
 static NetSocketState *net_socket_fd_init_stream(NetClientState *peer,
                                                  const char *model,
@@ -431,11 +432,11 @@ static NetSocketState *net_socket_fd_init_stream(NetClientState *peer,
     NetClientState *nc;
     NetSocketState *s;
 
-    nc = qemu_new_net_client(&net_socket_info, peer, model, name);
+    nc = qemu_new_net_client(TYPE_SOCKET_NET_CLIENT, peer, model, name);
 
     snprintf(nc->info_str, sizeof(nc->info_str), "socket: fd=%d", fd);
 
-    s = DO_UPCAST(NetSocketState, nc, nc);
+    s = SOCKET_NET_CLIENT(nc);
 
     s->fd = fd;
     s->listen_fd = -1;
@@ -537,8 +538,8 @@ static int net_socket_listen_init(NetClientState *peer,
         return -1;
     }
 
-    nc = qemu_new_net_client(&net_socket_info, peer, model, name);
-    s = DO_UPCAST(NetSocketState, nc, nc);
+    nc = qemu_new_net_client(TYPE_SOCKET_NET_CLIENT, peer, model, name);
+    s = SOCKET_NET_CLIENT(nc);
     s->fd = -1;
     s->listen_fd = fd;
     s->nc.link_down = true;
@@ -753,3 +754,26 @@ int net_init_socket(const NetClientOptions *opts, const char *name,
     }
     return 0;
 }
+
+static void net_socket_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "socket";
+    ncc->receive = net_socket_receive;
+    ncc->cleanup = net_socket_cleanup;
+}
+
+static TypeInfo net_socket_info = {
+    .name = TYPE_SOCKET_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(NetSocketState),
+    .class_init = net_socket_class_init,
+};
+
+static void net_socket_register_types(void)
+{
+    type_register_static(&net_socket_info);
+}
+
+type_init(net_socket_register_types)

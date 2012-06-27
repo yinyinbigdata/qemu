@@ -3462,13 +3462,24 @@ static void rtl8139_set_link_status(NetClientState *nc)
     rtl8139_update_irq(s);
 }
 
-static NetClientInfo net_rtl8139_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = rtl8139_can_receive,
-    .receive = rtl8139_receive,
-    .cleanup = rtl8139_cleanup,
-    .link_status_changed = rtl8139_set_link_status,
+#define TYPE_RTL8139_NET_CLIENT "rtl8139-net-client"
+
+static void rtl8139_net_client_class_init(ObjectClass *klass,
+                                          void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = rtl8139_can_receive;
+    ncc->receive = rtl8139_receive;
+    ncc->cleanup = rtl8139_cleanup;
+    ncc->link_status_changed = rtl8139_set_link_status;
+}
+
+static TypeInfo rtl8139_net_client_info = {
+    .name = TYPE_RTL8139_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = rtl8139_net_client_class_init,
 };
 
 static int pci_rtl8139_init(PCIDevice *dev)
@@ -3500,7 +3511,7 @@ static int pci_rtl8139_init(PCIDevice *dev)
     s->eeprom.contents[8] = s->conf.macaddr.a[2] | s->conf.macaddr.a[3] << 8;
     s->eeprom.contents[9] = s->conf.macaddr.a[4] | s->conf.macaddr.a[5] << 8;
 
-    s->nic = qemu_new_nic(&net_rtl8139_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_RTL8139_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -3549,6 +3560,7 @@ static TypeInfo rtl8139_info = {
 static void rtl8139_register_types(void)
 {
     type_register_static(&rtl8139_info);
+    type_register_static(&rtl8139_net_client_info);
 }
 
 type_init(rtl8139_register_types)

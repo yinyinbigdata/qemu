@@ -36,21 +36,6 @@ typedef struct ISANE2000State {
     NE2000State ne2000;
 } ISANE2000State;
 
-static void isa_ne2000_cleanup(NetClientState *nc)
-{
-    NE2000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
-
-    s->nic = NULL;
-}
-
-static NetClientInfo net_ne2000_isa_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = ne2000_can_receive,
-    .receive = ne2000_receive,
-    .cleanup = isa_ne2000_cleanup,
-};
-
 static const VMStateDescription vmstate_isa_ne2000 = {
     .name = "ne2000",
     .version_id = 2,
@@ -75,7 +60,7 @@ static int isa_ne2000_initfn(ISADevice *dev)
     qemu_macaddr_default_if_unset(&s->c.macaddr);
     ne2000_reset(s);
 
-    s->nic = qemu_new_nic(&net_ne2000_isa_info, &s->c,
+    s->nic = qemu_new_nic(TYPE_NE2000_NET_CLIENT, &s->c,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->c.macaddr.a);
 

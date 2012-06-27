@@ -710,12 +710,20 @@ static void ne2000_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_ne2000_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = ne2000_can_receive,
-    .receive = ne2000_receive,
-    .cleanup = ne2000_cleanup,
+static void ne2000_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = ne2000_can_receive;
+    ncc->receive = ne2000_receive;
+    ncc->cleanup = ne2000_cleanup;
+}
+
+static TypeInfo ne2000_net_client_info = {
+    .name = TYPE_NE2000_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = ne2000_net_client_class_init,
 };
 
 static int pci_ne2000_init(PCIDevice *pci_dev)
@@ -735,7 +743,7 @@ static int pci_ne2000_init(PCIDevice *pci_dev)
     qemu_macaddr_default_if_unset(&s->c.macaddr);
     ne2000_reset(s);
 
-    s->nic = qemu_new_nic(&net_ne2000_info, &s->c,
+    s->nic = qemu_new_nic(TYPE_NE2000_NET_CLIENT, &s->c,
                           object_get_typename(OBJECT(pci_dev)), pci_dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->c.macaddr.a);
 
@@ -783,6 +791,7 @@ static TypeInfo ne2000_info = {
 static void ne2000_register_types(void)
 {
     type_register_static(&ne2000_info);
+    type_register_static(&ne2000_net_client_info);
 }
 
 type_init(ne2000_register_types)

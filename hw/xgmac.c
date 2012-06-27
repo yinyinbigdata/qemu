@@ -370,12 +370,23 @@ static void eth_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_xgmac_enet_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = eth_can_rx,
-    .receive = eth_rx,
-    .cleanup = eth_cleanup,
+#define TYPE_XGMAC_ENET_NET_CLIENT "xgmac-enet-net-client"
+
+static void xgmac_enet_net_client_class_init(ObjectClass *klass,
+                                             void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = eth_can_rx;
+    ncc->receive = eth_rx;
+    ncc->cleanup = eth_cleanup;
+}
+
+static TypeInfo xgmac_enet_net_client_info = {
+    .name = TYPE_XGMAC_ENET_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = xgmac_enet_net_client_class_init,
 };
 
 static int xgmac_enet_init(SysBusDevice *dev)
@@ -389,7 +400,7 @@ static int xgmac_enet_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->mci_irq);
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(&net_xgmac_enet_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_XGMAC_ENET_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -428,6 +439,7 @@ static TypeInfo xgmac_enet_info = {
 static void xgmac_enet_register_types(void)
 {
     type_register_static(&xgmac_enet_info);
+    type_register_static(&xgmac_enet_net_client_info);
 }
 
 type_init(xgmac_enet_register_types)

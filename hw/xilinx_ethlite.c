@@ -201,12 +201,23 @@ static void eth_cleanup(NetClientState *nc)
     s->nic = NULL;
 }
 
-static NetClientInfo net_xilinx_ethlite_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = eth_can_rx,
-    .receive = eth_rx,
-    .cleanup = eth_cleanup,
+#define TYPE_XILINX_ETHLITE_NET_CLIENT "xilinx-ethlite-net-client"
+
+static void xilinx_ethlite_net_client_class_init(ObjectClass *klass,
+                                                 void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = eth_can_rx;
+    ncc->receive = eth_rx;
+    ncc->cleanup = eth_cleanup;
+}
+
+static TypeInfo xilinx_ethlite_net_client_info = {
+    .name = TYPE_XILINX_ETHLITE_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = xilinx_ethlite_net_client_class_init,
 };
 
 static int xilinx_ethlite_init(SysBusDevice *dev)
@@ -221,7 +232,7 @@ static int xilinx_ethlite_init(SysBusDevice *dev)
     sysbus_init_mmio(dev, &s->mmio);
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(&net_xilinx_ethlite_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_XILINX_ETHLITE_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     return 0;
@@ -253,6 +264,7 @@ static TypeInfo xilinx_ethlite_info = {
 static void xilinx_ethlite_register_types(void)
 {
     type_register_static(&xilinx_ethlite_info);
+    type_register_static(&xilinx_ethlite_net_client_info);
 }
 
 type_init(xilinx_ethlite_register_types)

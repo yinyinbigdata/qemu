@@ -578,13 +578,23 @@ static void eth_cleanup(NetClientState *nc)
         g_free(eth);
 }
 
-static NetClientInfo net_etraxfs_info = {
-	.type = NET_CLIENT_OPTIONS_KIND_NIC,
-	.size = sizeof(NICState),
-	.can_receive = eth_can_receive,
-	.receive = eth_receive,
-	.cleanup = eth_cleanup,
-	.link_status_changed = eth_set_link,
+#define TYPE_ETRAXFS_NET_CLIENT "etraxfs-net-client"
+
+static void etraxfs_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+	NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+	ncc->can_receive = eth_can_receive;
+	ncc->receive = eth_receive;
+	ncc->cleanup = eth_cleanup;
+	ncc->link_status_changed = eth_set_link;
+}
+
+static TypeInfo etraxfs_net_client_info = {
+	.name = TYPE_ETRAXFS_NET_CLIENT,
+	.parent = TYPE_NIC_NET_CLIENT,
+	.instance_size = sizeof(NICState),
+	.class_init = etraxfs_net_client_class_init,
 };
 
 static int fs_eth_init(SysBusDevice *dev)
@@ -604,7 +614,7 @@ static int fs_eth_init(SysBusDevice *dev)
 	sysbus_init_mmio(dev, &s->mmio);
 
 	qemu_macaddr_default_if_unset(&s->conf.macaddr);
-	s->nic = qemu_new_nic(&net_etraxfs_info, &s->conf,
+	s->nic = qemu_new_nic(TYPE_ETRAXFS_NET_CLIENT, &s->conf,
 			      object_get_typename(OBJECT(s)), dev->qdev.id, s);
 	qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -640,6 +650,7 @@ static TypeInfo etraxfs_eth_info = {
 static void etraxfs_eth_register_types(void)
 {
     type_register_static(&etraxfs_eth_info);
+    type_register_static(&etraxfs_net_client_info);
 }
 
 type_init(etraxfs_eth_register_types)

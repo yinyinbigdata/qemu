@@ -143,6 +143,9 @@ enum {
     defreg(VET),
 };
 
+static ssize_t e1000_receive(NetClientState *nc, const uint8_t *buf,
+                             size_t size);
+
 static void
 e1000_link_down(E1000State *s)
 {
@@ -456,7 +459,7 @@ static void
 e1000_send_packet(E1000State *s, const uint8_t *buf, int size)
 {
     if (s->phy_reg[PHY_CTRL] & MII_CR_LOOPBACK) {
-        s->nic->nc.info->receive(&s->nic->nc, buf, size);
+        e1000_receive(&s->nic->nc, buf, size);
     } else {
         qemu_send_packet(&s->nic->nc, buf, size);
     }
@@ -1227,13 +1230,23 @@ pci_e1000_uninit(PCIDevice *dev)
     qemu_del_net_client(&d->nic->nc);
 }
 
-static NetClientInfo net_e1000_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = e1000_can_receive,
-    .receive = e1000_receive,
-    .cleanup = e1000_cleanup,
-    .link_status_changed = e1000_set_link_status,
+#define TYPE_E1000_NET_CLIENT "e1000-net-client"
+
+static void e1000_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = e1000_can_receive;
+    ncc->receive = e1000_receive;
+    ncc->cleanup = e1000_cleanup;
+    ncc->link_status_changed = e1000_set_link_status;
+}
+
+static TypeInfo e1000_net_client_info = {
+    .name = TYPE_E1000_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = e1000_net_client_class_init,
 };
 
 static int pci_e1000_init(PCIDevice *pci_dev)
@@ -1268,7 +1281,7 @@ static int pci_e1000_init(PCIDevice *pci_dev)
     checksum = (uint16_t) EEPROM_SUM - checksum;
     d->eeprom_data[EEPROM_CHECKSUM_REG] = checksum;
 
-    d->nic = qemu_new_nic(&net_e1000_info, &d->conf,
+    d->nic = qemu_new_nic(TYPE_E1000_NET_CLIENT, &d->conf,
                           object_get_typename(OBJECT(d)), d->dev.qdev.id, d);
 
     qemu_format_nic_info_str(&d->nic->nc, macaddr);
@@ -1319,6 +1332,7 @@ static TypeInfo e1000_info = {
 static void e1000_register_types(void)
 {
     type_register_static(&e1000_info);
+    type_register_static(&e1000_net_client_info);
 }
 
 type_init(e1000_register_types)

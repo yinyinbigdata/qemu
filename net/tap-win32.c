@@ -667,11 +667,21 @@ static void tap_win32_send(void *opaque)
     }
 }
 
-static NetClientInfo net_tap_win32_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_TAP,
-    .size = sizeof(TAPState),
-    .receive = tap_receive,
-    .cleanup = tap_cleanup,
+static void tap_win32_net_client_class_init(ObjectClass *klass,
+                                            void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "tap";
+    ncc->receive = tap_receive;
+    ncc->cleanup = tap_cleanup;
+}
+
+static TypeInfo tap_win32_net_client_info = {
+    .name = TYPE_TAP_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(TAPState),
+    .class_init = tap_win32_net_client_class_init,
 };
 
 static int tap_win32_init(NetClientState *peer, const char *model,
@@ -762,3 +772,10 @@ void tap_set_vnet_hdr_len(NetClientState *nc, int len)
 {
     assert(0);
 }
+
+static void tap_win32_register_types(void)
+{
+    type_register_static(&tap_win32_net_client_info);
+}
+
+type_init(tap_win32_register_types)

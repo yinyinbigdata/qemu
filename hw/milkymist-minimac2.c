@@ -447,12 +447,23 @@ static void milkymist_minimac2_reset(DeviceState *d)
     s->phy_regs[R_PHY_ID2] = 0x161a;
 }
 
-static NetClientInfo net_milkymist_minimac2_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = minimac2_can_rx,
-    .receive = minimac2_rx,
-    .cleanup = minimac2_cleanup,
+#define TYPE_MILKYMIST_MINIMAC2_NET_CLIENT "milkymist-minimac2-net-client"
+
+static void milkymist_minimac2_net_client_class_init(ObjectClass *klass,
+                                                     void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = minimac2_can_rx;
+    ncc->receive = minimac2_rx;
+    ncc->cleanup = minimac2_cleanup;
+}
+
+static TypeInfo milkymist_minimac2_net_client_info = {
+    .name = TYPE_MILKYMIST_MINIMAC2_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = milkymist_minimac2_net_client_class_init,
 };
 
 static int milkymist_minimac2_init(SysBusDevice *dev)
@@ -478,7 +489,7 @@ static int milkymist_minimac2_init(SysBusDevice *dev)
     sysbus_add_memory(dev, s->buffers_base, &s->buffers);
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
-    s->nic = qemu_new_nic(&net_milkymist_minimac2_info, &s->conf,
+    s->nic = qemu_new_nic(TYPE_MILKYMIST_MINIMAC2_NET_CLIENT, &s->conf,
                           object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
@@ -545,6 +556,7 @@ static TypeInfo milkymist_minimac2_info = {
 static void milkymist_minimac2_register_types(void)
 {
     type_register_static(&milkymist_minimac2_info);
+    type_register_static(&milkymist_minimac2_net_client_info);
 }
 
 type_init(milkymist_minimac2_register_types)

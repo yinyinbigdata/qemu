@@ -110,7 +110,7 @@ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
     if (!n->nic->nc.peer) {
         return;
     }
-    if (n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+    if (object_dynamic_cast(OBJECT(n->nic->nc.peer), TYPE_TAP_NET_CLIENT)) {
         return;
     }
 
@@ -207,7 +207,7 @@ static void peer_test_vnet_hdr(VirtIONet *n)
     if (!n->nic->nc.peer)
         return;
 
-    if (n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP)
+    if (!object_dynamic_cast(OBJECT(n->nic->nc.peer), TYPE_TAP_NET_CLIENT))
         return;
 
     n->has_vnet_hdr = tap_has_vnet_hdr(n->nic->nc.peer);
@@ -266,7 +266,7 @@ static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
     }
 
     if (!n->nic->nc.peer ||
-        n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+        object_dynamic_cast(OBJECT(n->nic->nc.peer), TYPE_TAP_NET_CLIENT)) {
         return features;
     }
     if (!tap_get_vhost_net(n->nic->nc.peer)) {
@@ -305,7 +305,7 @@ static void virtio_net_set_features(VirtIODevice *vdev, uint32_t features)
                         (features >> VIRTIO_NET_F_GUEST_UFO)  & 1);
     }
     if (!n->nic->nc.peer ||
-        n->nic->nc.peer->info->type != NET_CLIENT_OPTIONS_KIND_TAP) {
+        object_dynamic_cast(OBJECT(n->nic->nc.peer), TYPE_TAP_NET_CLIENT)) {
         return;
     }
     if (!tap_get_vhost_net(n->nic->nc.peer)) {
@@ -1001,13 +1001,23 @@ static void virtio_net_cleanup(NetClientState *nc)
     n->nic = NULL;
 }
 
-static NetClientInfo net_virtio_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = virtio_net_can_receive,
-    .receive = virtio_net_receive,
-        .cleanup = virtio_net_cleanup,
-    .link_status_changed = virtio_net_set_link_status,
+#define TYPE_VIRTIO_NET_CLIENT "virtio-net-client"
+
+static void virtio_net_client_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = virtio_net_can_receive;
+    ncc->receive = virtio_net_receive;
+    ncc->cleanup = virtio_net_cleanup;
+    ncc->link_status_changed = virtio_net_set_link_status;
+}
+
+static TypeInfo virtio_net_client_info = {
+    .name = TYPE_VIRTIO_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = virtio_net_client_class_init,
 };
 
 VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
@@ -1048,7 +1058,8 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
     memcpy(&n->mac[0], &conf->macaddr, sizeof(n->mac));
     n->status = VIRTIO_NET_S_LINK_UP;
 
-    n->nic = qemu_new_nic(&net_virtio_info, conf, object_get_typename(OBJECT(dev)), dev->id, n);
+    n->nic = qemu_new_nic(TYPE_VIRTIO_NET_CLIENT, conf,
+                          object_get_typename(OBJECT(dev)), dev->id, n);
     peer_test_vnet_hdr(n);
     if (peer_has_vnet_hdr(n)) {
         tap_using_vnet_hdr(n->nic->nc.peer, 1);
@@ -1101,3 +1112,10 @@ void virtio_net_exit(VirtIODevice *vdev)
     qemu_del_net_client(&n->nic->nc);
     virtio_cleanup(&n->vdev);
 }
+
+static void virtio_net_register_types(void)
+{
+    type_register_static(&virtio_net_client_info);
+}
+
+type_init(virtio_net_register_types)

@@ -85,22 +85,6 @@ static const MemoryRegionOps lance_mem_ops = {
     },
 };
 
-static void lance_cleanup(NetClientState *nc)
-{
-    PCNetState *d = DO_UPCAST(NICState, nc, nc)->opaque;
-
-    pcnet_common_cleanup(d);
-}
-
-static NetClientInfo net_lance_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = pcnet_can_receive,
-    .receive = pcnet_receive,
-    .link_status_changed = pcnet_set_link_status,
-    .cleanup = lance_cleanup,
-};
-
 static const VMStateDescription vmstate_lance = {
     .name = "pcnet",
     .version_id = 3,
@@ -127,7 +111,7 @@ static int lance_init(SysBusDevice *dev)
 
     s->phys_mem_read = ledma_memory_read;
     s->phys_mem_write = ledma_memory_write;
-    return pcnet_common_init(&dev->qdev, s, &net_lance_info);
+    return pcnet_common_init(&dev->qdev, s);
 }
 
 static void lance_reset(DeviceState *dev)

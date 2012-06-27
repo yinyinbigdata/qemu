@@ -175,11 +175,22 @@ static ssize_t spapr_vlan_receive(NetClientState *nc, const uint8_t *buf,
     return size;
 }
 
-static NetClientInfo net_spapr_vlan_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
-    .size = sizeof(NICState),
-    .can_receive = spapr_vlan_can_receive,
-    .receive = spapr_vlan_receive,
+#define TYPE_SPAPR_VLAN_NET_CLIENT "spapr-vlan-net-client"
+
+static void spapr_vlan_net_client_class_init(ObjectClass *klass,
+                                             void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->can_receive = spapr_vlan_can_receive;
+    ncc->receive = spapr_vlan_receive;
+}
+
+static TypeInfo spapr_vlan_net_client_info = {
+    .name = TYPE_SPAPR_VLAN_NET_CLIENT,
+    .parent = TYPE_NIC_NET_CLIENT,
+    .instance_size = sizeof(NICState),
+    .class_init = spapr_vlan_net_client_class_init,
 };
 
 static void spapr_vlan_reset(VIOsPAPRDevice *sdev)
@@ -197,7 +208,7 @@ static int spapr_vlan_init(VIOsPAPRDevice *sdev)
 
     qemu_macaddr_default_if_unset(&dev->nicconf.macaddr);
 
-    dev->nic = qemu_new_nic(&net_spapr_vlan_info, &dev->nicconf,
+    dev->nic = qemu_new_nic(TYPE_SPAPR_VLAN_NET_CLIENT, &dev->nicconf,
                             object_get_typename(OBJECT(sdev)), sdev->qdev.id, dev);
     qemu_format_nic_info_str(&dev->nic->nc, dev->nicconf.macaddr.a);
 
@@ -518,6 +529,7 @@ static void spapr_vlan_register_types(void)
                              h_add_logical_lan_buffer);
     spapr_register_hypercall(H_MULTICAST_CTRL, h_multicast_ctrl);
     type_register_static(&spapr_vlan_info);
+    type_register_static(&spapr_vlan_net_client_info);
 }
 
 type_init(spapr_vlan_register_types)

@@ -123,11 +123,22 @@ static void net_slirp_cleanup(NetClientState *nc)
     QTAILQ_REMOVE(&slirp_stacks, s, entry);
 }
 
-static NetClientInfo net_slirp_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_USER,
-    .size = sizeof(SlirpState),
-    .receive = net_slirp_receive,
-    .cleanup = net_slirp_cleanup,
+#define TYPE_SLIRP_NET_CLIENT "slirp-net-client"
+
+static void net_slirp_class_init(ObjectClass *klass, void *class_data)
+{
+    NetClientClass *ncc = NET_CLIENT_CLASS(klass);
+
+    ncc->type_str = "user";
+    ncc->receive = net_slirp_receive;
+    ncc->cleanup = net_slirp_cleanup;
+}
+
+static TypeInfo net_slirp_info = {
+    .name = TYPE_SLIRP_NET_CLIENT,
+    .parent = TYPE_NET_CLIENT,
+    .instance_size = sizeof(SlirpState),
+    .class_init = net_slirp_class_init,
 };
 
 static int net_slirp_init(NetClientState *peer, const char *model,
@@ -233,7 +244,7 @@ static int net_slirp_init(NetClientState *peer, const char *model,
     }
 #endif
 
-    nc = qemu_new_net_client(&net_slirp_info, peer, model, name);
+    nc = qemu_new_net_client(TYPE_SLIRP_NET_CLIENT, peer, model, name);
 
     snprintf(nc->info_str, sizeof(nc->info_str),
              "net=%s,restrict=%s", inet_ntoa(net),
@@ -761,3 +772,9 @@ int net_slirp_parse_legacy(QemuOptsList *opts_list, const char *optarg, int *ret
     return 1;
 }
 
+static void net_slirp_register_types(void)
+{
+    type_register_static(&net_slirp_info);
+}
+
+type_init(net_slirp_register_types)

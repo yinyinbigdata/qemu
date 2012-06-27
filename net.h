@@ -1,6 +1,7 @@
 #ifndef QEMU_NET_H
 #define QEMU_NET_H
 
+#include "qemu/object.h"
 #include "qemu-queue.h"
 #include "qemu-common.h"
 #include "qdict.h"
@@ -29,6 +30,14 @@ typedef struct NICConf {
 
 /* Net clients */
 
+#define TYPE_NET_CLIENT "net-client"
+#define NET_CLIENT_GET_CLASS(obj) \
+   OBJECT_GET_CLASS(NetClientClass, obj, TYPE_NET_CLIENT)
+#define NET_CLIENT_CLASS(klass) \
+   OBJECT_CLASS_CHECK(NetClientClass, klass, TYPE_NET_CLIENT)
+#define NET_CLIENT(obj) \
+   OBJECT_CHECK(NetClientState, obj, TYPE_NET_CLIENT)
+
 typedef void (NetPoll)(NetClientState *, bool enable);
 typedef int (NetCanReceive)(NetClientState *);
 typedef ssize_t (NetReceive)(NetClientState *, const uint8_t *, size_t);
@@ -36,9 +45,10 @@ typedef ssize_t (NetReceiveIOV)(NetClientState *, const struct iovec *, int);
 typedef void (NetCleanup) (NetClientState *);
 typedef void (LinkStatusChanged)(NetClientState *);
 
-typedef struct NetClientInfo {
-    NetClientOptionsKind type;
-    size_t size;
+typedef struct NetClientClass {
+    ObjectClass parent;
+
+    const char *type_str; /* human-readable name for "info network" */
     NetReceive *receive;
     NetReceive *receive_raw;
     NetReceiveIOV *receive_iov;
@@ -46,10 +56,11 @@ typedef struct NetClientInfo {
     NetCleanup *cleanup;
     LinkStatusChanged *link_status_changed;
     NetPoll *poll;
-} NetClientInfo;
+} NetClientClass;
 
-struct NetClientState {
-    NetClientInfo *info;
+typedef struct NetClientState {
+    Object parent;
+
     int link_down;
     QTAILQ_ENTRY(NetClientState) next;
     NetClientState *peer;
@@ -58,7 +69,11 @@ struct NetClientState {
     char *name;
     char info_str[256];
     unsigned receive_disabled : 1;
-};
+} NetClientState;
+
+#define TYPE_NIC_NET_CLIENT "nic-net-client"
+#define NIC_NET_CLIENT(obj) \
+   OBJECT_CHECK(NICState, obj, TYPE_NIC_NET_CLIENT)
 
 typedef struct NICState {
     NetClientState nc;
@@ -68,11 +83,11 @@ typedef struct NICState {
 } NICState;
 
 NetClientState *qemu_find_netdev(const char *id);
-NetClientState *qemu_new_net_client(NetClientInfo *info,
+NetClientState *qemu_new_net_client(const char *typename,
                                     NetClientState *peer,
                                     const char *model,
                                     const char *name);
-NICState *qemu_new_nic(NetClientInfo *info,
+NICState *qemu_new_nic(const char *typename,
                        NICConf *conf,
                        const char *model,
                        const char *name,

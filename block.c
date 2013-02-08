@@ -3977,6 +3977,7 @@ static int coroutine_fn bdrv_co_io_em(BlockDriverState *bs, int64_t sector_num,
 {
     CoroutineIOCompletion co = {
         .coroutine = qemu_coroutine_self(),
+        .ret = -EINPROGRESS,
     };
     BlockDriverAIOCB *acb;
 
@@ -3992,7 +3993,9 @@ static int coroutine_fn bdrv_co_io_em(BlockDriverState *bs, int64_t sector_num,
     if (!acb) {
         return -EIO;
     }
-    qemu_coroutine_yield();
+    while (co.ret == -EINPROGRESS) {
+        qemu_coroutine_yield();
+    }
 
     return co.ret;
 }
@@ -4045,13 +4048,16 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
         BlockDriverAIOCB *acb;
         CoroutineIOCompletion co = {
             .coroutine = qemu_coroutine_self(),
+            .ret = -EINPROGRESS,
         };
 
         acb = bs->drv->bdrv_aio_flush(bs, bdrv_co_io_em_complete, &co);
         if (acb == NULL) {
             ret = -EIO;
         } else {
-            qemu_coroutine_yield();
+            while (co.ret == -EINPROGRESS) {
+                qemu_coroutine_yield();
+            }
             ret = co.ret;
         }
     } else {
@@ -4154,6 +4160,7 @@ int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
         BlockDriverAIOCB *acb;
         CoroutineIOCompletion co = {
             .coroutine = qemu_coroutine_self(),
+            .ret = -EINPROGRESS,
         };
 
         acb = bs->drv->bdrv_aio_discard(bs, sector_num, nb_sectors,
@@ -4161,7 +4168,9 @@ int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
         if (acb == NULL) {
             return -EIO;
         } else {
-            qemu_coroutine_yield();
+            while (co.ret == -EINPROGRESS) {
+                qemu_coroutine_yield();
+            }
             return co.ret;
         }
     } else {

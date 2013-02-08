@@ -3961,6 +3961,7 @@ void qemu_aio_release(void *p)
 typedef struct CoroutineIOCompletion {
     Coroutine *coroutine;
     int ret;
+    bool done;
 } CoroutineIOCompletion;
 
 static void bdrv_co_io_em_complete(void *opaque, int ret)
@@ -3968,6 +3969,7 @@ static void bdrv_co_io_em_complete(void *opaque, int ret)
     CoroutineIOCompletion *co = opaque;
 
     co->ret = ret;
+    co->done = true;
     qemu_coroutine_enter(co->coroutine, NULL);
 }
 
@@ -3992,7 +3994,9 @@ static int coroutine_fn bdrv_co_io_em(BlockDriverState *bs, int64_t sector_num,
     if (!acb) {
         return -EIO;
     }
-    qemu_coroutine_yield();
+    while (!co.done) {
+        qemu_coroutine_yield();
+    }
 
     return co.ret;
 }
@@ -4051,7 +4055,9 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
         if (acb == NULL) {
             ret = -EIO;
         } else {
-            qemu_coroutine_yield();
+            while (!co.done) {
+                qemu_coroutine_yield();
+            }
             ret = co.ret;
         }
     } else {
@@ -4161,7 +4167,9 @@ int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
         if (acb == NULL) {
             return -EIO;
         } else {
-            qemu_coroutine_yield();
+            while (!co.done) {
+                qemu_coroutine_yield();
+            }
             return co.ret;
         }
     } else {

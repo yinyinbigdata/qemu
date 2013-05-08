@@ -302,6 +302,7 @@ BlockDriverState *bdrv_new(const char *device_name)
     BlockDriverState *bs;
 
     bs = g_malloc0(sizeof(BlockDriverState));
+    bs->aio_context = qemu_get_aio_context();
     pstrcpy(bs->device_name, sizeof(bs->device_name), device_name);
     if (device_name[0] != '\0') {
         QTAILQ_INSERT_TAIL(&bdrv_states, bs, list);
@@ -4876,6 +4877,19 @@ out:
 
 AioContext *bdrv_get_aio_context(BlockDriverState *bs)
 {
-    /* Currently BlockDriverState always uses the main loop AioContext */
-    return qemu_get_aio_context();
+    return bs->aio_context;
+}
+
+void bdrv_set_aio_context(BlockDriverState *bs, AioContext *ctx)
+{
+    /* TODO safety */
+    bs->aio_context = ctx;
+
+    /* TODO call .bdrv_set_aio_context() so block drivers have a chance to customize this */
+    if (bs->file) {
+        bdrv_set_aio_context(bs->file, ctx);
+    }
+    if (bs->backing_hd) {
+        bdrv_set_aio_context(bs->backing_hd, ctx);
+    }
 }

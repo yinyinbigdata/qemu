@@ -389,6 +389,13 @@ static inline int raw_get_aio_fd(BlockDriverState *bs)
 }
 #endif
 
+/**
+ * bdrv_set_aio_context:
+ *
+ * Bind the #BlockDriverState to an #AioContext.
+ */
+void bdrv_set_aio_context(BlockDriverState *bs, AioContext *ctx);
+
 enum BlockAcctType {
     BDRV_ACCT_READ,
     BDRV_ACCT_WRITE,

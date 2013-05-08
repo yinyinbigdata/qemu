@@ -245,6 +245,8 @@ struct BlockDriverState {
     BlockDriverState *backing_hd;
     BlockDriverState *file;
 
+    AioContext *aio_context;
+
     NotifierList close_notifiers;
 
     /* number of in-flight copy-on-read requests */

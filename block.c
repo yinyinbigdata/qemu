@@ -4059,7 +4059,7 @@ static BlockDriverAIOCB *bdrv_aio_rw_vector(BlockDriverState *bs,
     acb->is_write = is_write;
     acb->qiov = qiov;
     acb->bounce = qemu_blockalign(bs, qiov->size);
-    acb->bh = qemu_bh_new(bdrv_aio_bh_cb, acb);
+    acb->bh = bdrv_bh_new(bs, bdrv_aio_bh_cb, acb);
 
     if (is_write) {
         qemu_iovec_to_buf(acb->qiov, 0, acb->bounce, qiov->size);
@@ -4141,7 +4141,7 @@ static void coroutine_fn bdrv_co_do_rw(void *opaque)
             acb->req.nb_sectors, acb->req.qiov, 0);
     }
 
-    acb->bh = qemu_bh_new(bdrv_co_em_bh, acb);
+    acb->bh = bdrv_bh_new(bs, bdrv_co_em_bh, acb);
     qemu_bh_schedule(acb->bh);
 }
 
@@ -4175,7 +4175,7 @@ static void coroutine_fn bdrv_aio_flush_co_entry(void *opaque)
     BlockDriverState *bs = acb->common.bs;
 
     acb->req.error = bdrv_co_flush(bs);
-    acb->bh = qemu_bh_new(bdrv_co_em_bh, acb);
+    acb->bh = bdrv_bh_new(bs, bdrv_co_em_bh, acb);
     qemu_bh_schedule(acb->bh);
 }
 
@@ -4202,7 +4202,7 @@ static void coroutine_fn bdrv_aio_discard_co_entry(void *opaque)
     BlockDriverState *bs = acb->common.bs;
 
     acb->req.error = bdrv_co_discard(bs, acb->req.sector, acb->req.nb_sectors);
-    acb->bh = qemu_bh_new(bdrv_co_em_bh, acb);
+    acb->bh = bdrv_bh_new(bs, bdrv_co_em_bh, acb);
     qemu_bh_schedule(acb->bh);
 }
 

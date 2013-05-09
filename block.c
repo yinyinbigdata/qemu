@@ -4893,3 +4893,8 @@ void bdrv_set_aio_context(BlockDriverState *bs, AioContext *ctx)
         bdrv_set_aio_context(bs->backing_hd, ctx);
     }
 }
+
+QEMUBH *bdrv_bh_new(BlockDriverState *bs, QEMUBHFunc *cb, void *opaque)
+{
+    return aio_bh_new(bdrv_get_aio_context(bs), cb, opaque);
+}

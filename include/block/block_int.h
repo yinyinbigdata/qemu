@@ -306,6 +306,16 @@ void bdrv_set_io_limits(BlockDriverState *bs,
  */
 AioContext *bdrv_get_aio_context(BlockDriverState *bs);
 
+/**
+ * bdrv_bh_new:
+ *
+ * This function must be used instead of qemu_bh_new().  It ensures that the
+ * #QEMUBH executes in the #BlockDriverState's #AioContext.
+ *
+ * Returns: a #QEMUBH
+ */
+QEMUBH *bdrv_bh_new(BlockDriverState *bs, QEMUBHFunc *cb, void *opaque);
+
 #ifdef _WIN32
 int is_windows_drive(const char *filename);
 #endif
